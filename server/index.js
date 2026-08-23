@@ -70,17 +70,39 @@ app.post('/api/refresh/:projectKey', async (req, res) => {
 
 // ── Jira write: sync tickets ──────────────────────────────────────────────────
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1500;
+const MAX_RETRIES = 5;
+// Base delay for the first retry (ms). Each subsequent wait doubles, capped at MAX_RETRY_DELAY_MS.
+// A poorly configured load balancer / unstable on-prem instance may need minutes to recover.
+const BASE_RETRY_DELAY_MS = 30_000;   // 30 s
+const MAX_RETRY_DELAY_MS  = 300_000;  // 5 min
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Returns true when the error is transient and worth retrying.
+ * Permanent client errors (400, 404, 422 …) are not retried.
+ */
+function isRetryable(err) {
+  if (!err.response) return true; // network / timeout error
+  const status = err.response.status;
+  // 401 Unauthorized can be a transient auth-token hiccup on bad load balancers;
+  // 5xx are always transient; 408/429 too.
+  return status === 401 || status === 408 || status === 429 || status >= 500;
+}
+
+function retryDelayMs(attempt) {
+  // Exponential back-off: 30 s, 60 s, 120 s, 240 s, 300 s (capped)
+  return Math.min(BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1), MAX_RETRY_DELAY_MS);
+}
+
 // POST /api/jira/sync
 // Body: { projectKey: string, tickets: Array<{ summary, description?, issuetype? }> }
-// Streams SSE events: { type: 'progress', index, total, status, key? }
-//   type: 'done' when finished, type: 'error' per failed ticket
+// Streams SSE events:
+//   { type: 'progress', index, total, status: 'done'|'error', key?, error? }
+//   { type: 'retrying', index, attempt, maxRetries, waitSeconds, summary }
+//   { type: 'done', total, successCount, errorCount }
 app.post('/api/jira/sync', async (req, res) => {
   const { projectKey, tickets } = req.body;
   if (!projectKey || !Array.isArray(tickets) || tickets.length === 0) {
@@ -122,8 +144,22 @@ app.post('/api/jira/sync', async (req, res) => {
         break;
       } catch (e) {
         lastError = e.message;
-        if (attempt < MAX_RETRIES) {
-          await sleep(RETRY_DELAY_MS * attempt);
+        const retryable = isRetryable(e);
+        if (attempt < MAX_RETRIES && retryable) {
+          const waitMs = retryDelayMs(attempt);
+          send({
+            type: 'retrying',
+            index: i,
+            attempt,
+            maxRetries: MAX_RETRIES,
+            waitSeconds: Math.round(waitMs / 1000),
+            summary: ticket.summary,
+            error: lastError,
+          });
+          await sleep(waitMs);
+        } else {
+          // Non-retryable error or last attempt – give up immediately
+          break;
         }
       }
     }
@@ -140,7 +176,6 @@ app.post('/api/jira/sync', async (req, res) => {
   send({ type: 'done', total, successCount, errorCount });
   res.end();
 });
-
 
 
 app.get('/api/llm/health', async (req, res) => {

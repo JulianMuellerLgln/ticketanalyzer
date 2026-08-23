@@ -590,6 +590,13 @@ html, body, #root {
   cursor: help;
 }
 
+.js-retry-info {
+  font-size: 10px;
+  color: #f0a500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .js-progress-wrap {
   position: relative;
   height: 12px;

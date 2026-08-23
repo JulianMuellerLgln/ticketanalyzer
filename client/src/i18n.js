@@ -57,6 +57,7 @@ export const i18n = {
     syncNoProject: 'Select a project first',
     syncSummaryPlaceholder: 'Ticket summary…',
     syncDescPlaceholder: 'Description (optional)',
+    syncRetrying: 'Retry {attempt}/{max} – wait {s}s…',
     cancel: 'Cancel',
   },
   de: {
@@ -117,6 +118,7 @@ export const i18n = {
     syncNoProject: 'Bitte zuerst ein Projekt wählen',
     syncSummaryPlaceholder: 'Ticket-Zusammenfassung…',
     syncDescPlaceholder: 'Beschreibung (optional)',
+    syncRetrying: 'Versuch {attempt}/{max} – warte {s}s…',
     cancel: 'Abbrechen',
   },
 };
