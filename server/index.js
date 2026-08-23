@@ -49,8 +49,7 @@ app.get('/api/issues/:projectKey', async (req, res) => {
 
 app.get('/api/boards', async (req, res) => {
   try {
-    const client = getClient();
-    const boards = await fetchBoards(client);
+    const boards = await fetchBoards();
     res.json(boards);
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -11,7 +11,7 @@ export default function WidgetShell({ id, title, children, defaultPos, onClose }
     <AnimatePresence>
       <Draggable
         nodeRef={nodeRef}
-        handle=".widget-header"
+        handle=".wh"
         defaultPosition={defaultPos || { x: 0, y: 0 }}
         disabled={expanded}
         bounds="parent"

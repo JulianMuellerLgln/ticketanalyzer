@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, Globe } from 'lucide-react';
 import Draggable from 'react-draggable';
@@ -14,7 +14,7 @@ import Roadmap from './components/Roadmap';
 // Simple widget wrapper using react-draggable
 function Widget({ id, title, children, defaultPos, zMap, onFocus }) {
   const [expanded, setExpanded] = useState(false);
-  const nodeRef = { current: null };
+  const nodeRef = useRef(null);
 
   return (
     <Draggable
@@ -26,7 +26,7 @@ function Widget({ id, title, children, defaultPos, zMap, onFocus }) {
       onStart={() => onFocus(id)}
     >
       <div
-        ref={(el) => (nodeRef.current = el)}
+        ref={nodeRef}
         className={`widget${expanded ? ' widget--expanded' : ''}`}
         style={{ zIndex: zMap[id] || 1 }}
         onClick={() => onFocus(id)}
@@ -72,8 +72,11 @@ export default function App() {
   const [zTop, setZTop] = useState(2);
 
   function focusWidget(id) {
-    setZTop((z) => z + 1);
-    setZMap((m) => ({ ...m, [id]: zTop + 1 }));
+    setZTop((z) => {
+      const next = z + 1;
+      setZMap((m) => ({ ...m, [id]: next }));
+      return next;
+    });
   }
 
   // Poll LLM health every 15s
@@ -91,20 +94,12 @@ export default function App() {
       .catch(() => { setJiraOk(false); });
   }, []);
 
-  // Auto-refresh hourly
-  useEffect(() => {
-    if (!selectedProject) return;
-    const iv = setInterval(() => doRefresh(), 3600000);
-    return () => clearInterval(iv);
-  }, [selectedProject]);
-
   const doRefresh = useCallback(async () => {
     if (!selectedProject) return;
     setRefreshing(true);
     try {
       const res = await api.refresh(selectedProject);
       setLastRefresh(res.lastRefresh);
-      // Re-fetch issues after refresh
       const data = await api.issues(selectedProject);
       setIssues(data.issues || []);
     } catch {
@@ -113,6 +108,13 @@ export default function App() {
       setRefreshing(false);
     }
   }, [selectedProject]);
+
+  // Auto-refresh hourly
+  useEffect(() => {
+    if (!selectedProject) return;
+    const iv = setInterval(() => doRefresh(), 3600000);
+    return () => clearInterval(iv);
+  }, [selectedProject, doRefresh]);
 
   async function selectProject(key) {
     setSelectedProject(key);

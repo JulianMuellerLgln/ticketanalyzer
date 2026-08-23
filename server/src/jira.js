@@ -34,13 +34,17 @@ async function fetchIssues(client, projectKey, maxResults = 200) {
   return res.data.issues || [];
 }
 
-async function fetchBoards(client) {
-  const agileClient = axios.create({
+function buildAgileClient() {
+  return axios.create({
     baseURL: `${process.env.JIRA_BASE_URL}/rest/agile/1.0`,
     auth: { username: process.env.JIRA_USER_EMAIL, password: process.env.JIRA_API_TOKEN },
     headers: { 'Content-Type': 'application/json' },
     timeout: 15000,
   });
+}
+
+async function fetchBoards() {
+  const agileClient = buildAgileClient();
   const res = await agileClient.get('/board');
   return res.data.values || [];
 }
