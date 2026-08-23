@@ -17,7 +17,7 @@ export const api = {
    * Sync tickets to Jira via SSE stream.
    * @param {string} projectKey
    * @param {Array<{summary:string, description?:string, issuetype?:string}>} tickets
-   * @param {{ onProgress: (event) => void, onDone: (event) => void, onError: () => void }} callbacks
+   * @param {{ onProgress: (event: object) => void, onDone: (event: object) => void, onError: (message: string) => void }} callbacks
    * @returns {{ close: () => void }} – call close() to abort
    */
   syncToJira: async (projectKey, tickets, { onProgress, onDone, onError }) => {

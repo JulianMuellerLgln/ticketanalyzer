@@ -86,6 +86,9 @@ app.post('/api/jira/sync', async (req, res) => {
   if (!projectKey || !Array.isArray(tickets) || tickets.length === 0) {
     return res.status(400).json({ error: 'projectKey and non-empty tickets array required' });
   }
+  if (!/^[A-Z][A-Z0-9]+$/.test(projectKey)) {
+    return res.status(400).json({ error: 'Invalid project key' });
+  }
 
   let client;
   try {

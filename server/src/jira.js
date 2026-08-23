@@ -18,6 +18,9 @@ async function fetchProjects(client) {
 }
 
 async function fetchIssues(client, projectKey, maxResults = 200) {
+  if (!/^[A-Z][A-Z0-9]+$/.test(projectKey)) {
+    throw new Error(`Invalid project key: ${projectKey}`);
+  }
   const res = await client.get('/search', {
     params: {
       jql: `project = ${projectKey} ORDER BY updated DESC`,
