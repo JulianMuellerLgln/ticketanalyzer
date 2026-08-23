@@ -10,6 +10,7 @@ import TicketList from './components/TicketList';
 import LLMInsights from './components/LLMInsights';
 import IdeaEvaluator from './components/IdeaEvaluator';
 import Roadmap from './components/Roadmap';
+import JiraSync from './components/JiraSync';
 
 // Simple widget wrapper using react-draggable
 function Widget({ id, title, children, defaultPos, zMap, onFocus }) {
@@ -53,6 +54,7 @@ const POSITIONS = {
   insights: { x: 440, y: 10 },
   roadmap:  { x: 20,  y: 340 },
   idea:     { x: 440, y: 340 },
+  jirasync: { x: 860, y: 10 },
 };
 
 export default function App() {
@@ -68,7 +70,7 @@ export default function App() {
 
   const [llm, setLlm] = useState({ online: false, models: [] });
 
-  const [zMap, setZMap] = useState({ tickets: 1, insights: 1, roadmap: 1, idea: 1 });
+  const [zMap, setZMap] = useState({ tickets: 1, insights: 1, roadmap: 1, idea: 1, jirasync: 1 });
   const [zTop, setZTop] = useState(2);
 
   function focusWidget(id) {
@@ -194,6 +196,10 @@ export default function App() {
 
           <Widget id="idea" title={t.ideaEval} defaultPos={POSITIONS.idea} zMap={zMap} onFocus={focusWidget}>
             <IdeaEvaluator t={t} lang={lang} />
+          </Widget>
+
+          <Widget id="jirasync" title={t.syncStart} defaultPos={POSITIONS.jirasync} zMap={zMap} onFocus={focusWidget}>
+            <JiraSync projectKey={selectedProject} t={t} />
           </Widget>
         </AnimatePresence>
       </div>

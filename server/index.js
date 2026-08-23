@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
-const { buildJiraClient, fetchProjects, fetchIssues, fetchBoards } = require('./src/jira');
+const { buildJiraClient, fetchProjects, fetchIssues, fetchBoards, createIssue } = require('./src/jira');
 const { checkHealth, chat, buildAnalysisPrompt, buildIdeaEvalPrompt } = require('./src/ollama');
 
 const app = express();
@@ -68,7 +68,77 @@ app.post('/api/refresh/:projectKey', async (req, res) => {
   }
 });
 
-// ── Ollama routes ─────────────────────────────────────────────────────────────
+// ── Jira write: sync tickets ──────────────────────────────────────────────────
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1500;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// POST /api/jira/sync
+// Body: { projectKey: string, tickets: Array<{ summary, description?, issuetype? }> }
+// Streams SSE events: { type: 'progress', index, total, status, key? }
+//   type: 'done' when finished, type: 'error' per failed ticket
+app.post('/api/jira/sync', async (req, res) => {
+  const { projectKey, tickets } = req.body;
+  if (!projectKey || !Array.isArray(tickets) || tickets.length === 0) {
+    return res.status(400).json({ error: 'projectKey and non-empty tickets array required' });
+  }
+
+  let client;
+  try {
+    client = getClient();
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  function send(data) {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  }
+
+  const total = tickets.length;
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (let i = 0; i < total; i++) {
+    const ticket = tickets[i];
+    let created = null;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        created = await createIssue(client, projectKey, ticket);
+        break;
+      } catch (e) {
+        lastError = e.message;
+        if (attempt < MAX_RETRIES) {
+          await sleep(RETRY_DELAY_MS * attempt);
+        }
+      }
+    }
+
+    if (created) {
+      successCount++;
+      send({ type: 'progress', index: i, total, status: 'done', key: created.key, summary: ticket.summary });
+    } else {
+      errorCount++;
+      send({ type: 'progress', index: i, total, status: 'error', summary: ticket.summary, error: lastError });
+    }
+  }
+
+  send({ type: 'done', total, successCount, errorCount });
+  res.end();
+});
+
+
 
 app.get('/api/llm/health', async (req, res) => {
   const result = await checkHealth();

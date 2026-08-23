@@ -49,4 +49,16 @@ async function fetchBoards() {
   return res.data.values || [];
 }
 
-module.exports = { buildJiraClient, fetchProjects, fetchIssues, fetchBoards };
+async function createIssue(client, projectKey, { summary, description = '', issuetype = 'Task' }) {
+  const res = await client.post('/issue', {
+    fields: {
+      project: { key: projectKey },
+      summary,
+      description,
+      issuetype: { name: issuetype },
+    },
+  });
+  return res.data; // { id, key, self }
+}
+
+module.exports = { buildJiraClient, fetchProjects, fetchIssues, fetchBoards, createIssue };

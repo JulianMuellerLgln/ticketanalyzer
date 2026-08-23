@@ -532,3 +532,93 @@ html, body, #root {
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* ── JiraSync ────────────────────────────────────────────────────────────── */
+.jirasync {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 340px;
+}
+
+.js-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.js-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.js-status-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.js-summary {
+  flex: 3;
+  min-width: 0;
+}
+
+.js-type {
+  flex: 1;
+  min-width: 70px;
+}
+
+.js-desc {
+  flex: 3;
+  min-width: 0;
+}
+
+.js-key {
+  font-size: 10px;
+  color: #4caf50;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.js-err {
+  font-size: 12px;
+  font-weight: bold;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+.js-progress-wrap {
+  position: relative;
+  height: 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.js-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+  border-radius: var(--radius);
+}
+
+.js-progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  pointer-events: none;
+}
+
+.js-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
