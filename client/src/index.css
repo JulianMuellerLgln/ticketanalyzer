@@ -112,6 +112,35 @@ html, body {
   gap: 8px;
 }
 
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mode-switch-btn {
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mode-switch-btn--active {
+  color: var(--text);
+  border-color: #38516b;
+  background: rgba(56, 81, 107, 0.22);
+}
+
 /* ── Canvas ──────────────────────────────────────────────────────────────── */
 .canvas {
   flex: 1;
@@ -372,6 +401,162 @@ html, body {
   padding: 10px 12px;
 }
 
+.workflow-panel {
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workflow-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.workflow-panel-title,
+.workflow-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.workflow-panel-subtitle {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 920px;
+}
+
+.workflow-stat-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workflow-stat {
+  min-width: 110px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workflow-stat-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.workflow-stat-value {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workflow-meta-row,
+.workflow-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workflow-chip,
+.workflow-tag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workflow-tag--dim,
+.ticket-table-product--missing,
+.ticket-table-objective--missing {
+  color: var(--muted);
+}
+
+.workflow-ticket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workflow-ticket-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workflow-ticket-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workflow-ticket-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workflow-ticket-summary {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.workflow-ticket-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.workflow-ticket-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workflow-checklist ul {
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.workflow-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.workflow-textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.workflow-textarea--lg {
+  min-height: 150px;
+}
+
 .sprint-summary-meta {
   display: flex;
   flex-direction: column;
@@ -460,7 +645,15 @@ html, body {
 .ticket-table-header,
 .ticket-table-row {
   display: grid;
-  grid-template-columns: 110px minmax(280px, 1.8fr) 110px 150px 90px minmax(190px, 1.2fr);
+  grid-template-columns:
+    105px
+    minmax(240px, 1.8fr)
+    minmax(150px, 1.1fr)
+    minmax(150px, 1.1fr)
+    95px
+    130px
+    80px
+    minmax(180px, 1.1fr);
   gap: 10px;
   align-items: center;
   min-width: 0;
@@ -510,11 +703,18 @@ html, body {
 }
 
 .ticket-table-summary,
+.ticket-table-product,
+.ticket-table-objective,
 .ticket-table-status,
 .ticket-table-priority {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ticket-table-product,
+.ticket-table-objective {
+  font-size: 11px;
 }
 
 .ticket-table-days {
@@ -593,6 +793,25 @@ html, body {
   gap: 16px;
 }
 
+.scrum-guide-modal {
+  width: min(980px, 100%);
+}
+
+.scrum-guide-body {
+  gap: 20px;
+}
+
+.guide-section h4 {
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.guide-section ul {
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
 .ticket-detail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -651,6 +870,24 @@ html, body {
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.refinement-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg3);
+  padding: 12px;
+}
+
+.refinement-editor-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
 }
 
 /* ── LLM Insights ────────────────────────────────────────────────────────── */

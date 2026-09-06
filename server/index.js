@@ -9,13 +9,16 @@ const {
   fetchProjects,
   fetchIssues,
   fetchBoards,
+  fetchObjectives,
+  fetchProjectComponents,
   fetchIssueTypes,
   fetchCreateMeta,
   createIssue,
+  updateIssue,
   getJiraConfigStatus,
   classifyJiraError,
 } = require('./src/jira');
-const { checkHealth, chat, buildAnalysisPrompt, buildIdeaEvalPrompt } = require('./src/ollama');
+const { checkHealth, chat, buildAnalysisPrompt, buildIdeaEvalPrompt, buildRefinementPrompt } = require('./src/ollama');
 
 const app = express();
 app.use(cors());
@@ -87,6 +90,15 @@ function sanitizeBoardState(input) {
     placements: sanitizeBoardPlacements(input?.placements),
     sprints: sanitizeBoardSprints(input?.sprints),
     showArchive: input?.showArchive !== false,
+    planning: sanitizePlanningState(input?.planning),
+  };
+}
+
+function sanitizePlanningState(planning) {
+  return {
+    sprintGoalDraft: asText(planning?.sprintGoalDraft),
+    openQuestions: asText(planning?.openQuestions),
+    teamAbsences: asText(planning?.teamAbsences),
   };
 }
 
@@ -302,6 +314,31 @@ app.get('/api/boards', async (req, res) => {
   }
 });
 
+app.get('/api/jira/components/:projectKey', async (req, res) => {
+  const { projectKey } = req.params;
+  if (!isValidProjectKey(projectKey)) {
+    return res.status(400).json({ error: 'Invalid project key' });
+  }
+  try {
+    const client = getClient();
+    const components = await fetchProjectComponents(client, projectKey);
+    res.json(components);
+  } catch (e) {
+    const payload = jiraErrorPayload(e);
+    res.status(payload.status).json(payload.body);
+  }
+});
+
+app.get('/api/jira/objectives', async (req, res) => {
+  try {
+    const result = await fetchObjectives();
+    res.json(result);
+  } catch (e) {
+    const payload = jiraErrorPayload(e);
+    res.status(payload.status).json(payload.body);
+  }
+});
+
 app.post('/api/refresh/:projectKey', async (req, res) => {
   const { projectKey } = req.params;
   try {
@@ -471,6 +508,22 @@ app.post('/api/jira/sync', async (req, res) => {
   res.end();
 });
 
+app.put('/api/jira/issues/:issueKey', async (req, res) => {
+  const { issueKey } = req.params;
+  const fields = req.body?.fields;
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+    return res.status(400).json({ error: 'fields object required' });
+  }
+  try {
+    const client = getClient();
+    const result = await updateIssue(client, issueKey, fields);
+    res.json(result);
+  } catch (e) {
+    const payload = jiraErrorPayload(e);
+    res.status(payload.status).json(payload.body);
+  }
+});
+
 
 app.get('/api/llm/health', async (req, res) => {
   const result = await checkHealth();
@@ -522,6 +575,61 @@ app.post('/api/llm/evaluate-idea', async (req, res) => {
   }
 });
 
+function normalizeRefinementSuggestion(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      refinedSummary: '',
+      refinedDescription: '',
+      acceptanceCriteria: [],
+      productComponent: { name: '', reason: '' },
+      objectiveAlignment: { objectiveKey: null, objectiveSummary: '', confidence: 'low', reason: '' },
+      openQuestions: [],
+    };
+  }
+
+  const confidence = asText(parsed?.objectiveAlignment?.confidence).toLowerCase();
+  return {
+    refinedSummary: asText(parsed.refinedSummary),
+    refinedDescription: asText(parsed.refinedDescription),
+    acceptanceCriteria: Array.isArray(parsed.acceptanceCriteria)
+      ? parsed.acceptanceCriteria.map((entry) => asText(entry)).filter(Boolean)
+      : [],
+    productComponent: {
+      name: asText(parsed?.productComponent?.name),
+      reason: asText(parsed?.productComponent?.reason),
+    },
+    objectiveAlignment: {
+      objectiveKey: asText(parsed?.objectiveAlignment?.objectiveKey) || null,
+      objectiveSummary: asText(parsed?.objectiveAlignment?.objectiveSummary),
+      confidence: ['high', 'medium', 'low'].includes(confidence) ? confidence : 'low',
+      reason: asText(parsed?.objectiveAlignment?.reason),
+    },
+    openQuestions: Array.isArray(parsed.openQuestions)
+      ? parsed.openQuestions.map((entry) => asText(entry)).filter(Boolean)
+      : [],
+  };
+}
+
+app.post('/api/llm/refine-ticket', async (req, res) => {
+  const { ticket, availableComponents = [], objectiveCandidates = [], lang = 'en' } = req.body || {};
+  if (!ticket || typeof ticket !== 'object') {
+    return res.status(400).json({ error: 'ticket object required' });
+  }
+  try {
+    const prompt = buildRefinementPrompt({ ticket, availableComponents, objectiveCandidates, lang });
+    const raw = await chat(prompt);
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = {};
+    }
+    res.json(normalizeRefinementSuggestion(parsed));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message, reason: e.reason || 'llm_error' });
+  }
+});
+
 // ── Auto-refresh cron (hourly) ────────────────────────────────────────────────
 
 function scheduleRefreshJob() {
@@ -559,7 +667,9 @@ module.exports = {
   sanitizeBoardPlacements,
   sanitizeBoardSprints,
   sanitizeBoardState,
+  sanitizePlanningState,
   normalizeAnalysis,
+  normalizeRefinementSuggestion,
   isRetryable,
   retryDelayMs,
 };

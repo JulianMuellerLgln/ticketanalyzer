@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, X } from 'lucide-react';
+import { Save, Search, Sparkles, X } from 'lucide-react';
 import { api } from '../api';
 import TicketLink from './TicketLink';
 
@@ -17,6 +17,26 @@ const ACCEPTANCE_LEVELS = {
   1: { bg: 'rgba(240, 165, 0, 0.12)', border: 'rgba(240, 165, 0, 0.28)', color: '#ffd37a' },
   5: { bg: 'rgba(34, 197, 94, 0.12)', border: 'rgba(34, 197, 94, 0.28)', color: '#8cf0b0' },
 };
+
+const DEFAULT_PLANNING_STATE = {
+  sprintGoalDraft: '',
+  openQuestions: '',
+  teamAbsences: '',
+};
+
+const DEFAULT_AI_STATE = {
+  loading: false,
+  saving: false,
+  error: '',
+  savedMessage: '',
+  result: null,
+};
+
+const STOP_WORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'oder', 'und', 'der', 'die', 'das',
+  'ein', 'eine', 'mit', 'auf', 'von', 'ist', 'are', 'you', 'your', 'after', 'before', 'when',
+  'then', 'will', 'nicht', 'noch', 'kein', 'keine', 'einer', 'einem', 'zum', 'zur',
+]);
 
 function safeIssueReactKey(issue, idx) {
   const key = String(issue?.key || '').trim();
@@ -235,6 +255,119 @@ function formatList(values) {
   return values.map((entry) => String(entry || '').trim()).filter(Boolean).join(', ');
 }
 
+function primaryComponentName(ticket) {
+  return String(ticket?.fields?.components?.[0]?.name || '').trim();
+}
+
+function tokenize(value) {
+  const words = String(value || '').toLowerCase().match(/[a-z0-9äöüß]{3,}/g) || [];
+  return [...new Set(words.filter((word) => !STOP_WORDS.has(word)))];
+}
+
+function objectiveIssueText(issue) {
+  return [
+    issue?.fields?.summary || '',
+    extractRichText(issue?.fields?.description),
+    formatList(issue?.fields?.labels),
+    formatList((issue?.fields?.components || []).map((component) => component?.name)),
+  ].join(' ');
+}
+
+function buildObjectiveMatch(ticket, objectives) {
+  const ticketTokens = new Set(tokenize([
+    ticket?.fields?.summary || '',
+    issueText(ticket),
+    formatList(ticket?.fields?.labels),
+    formatList((ticket?.fields?.components || []).map((component) => component?.name)),
+  ].join(' ')));
+
+  if (ticketTokens.size === 0) return null;
+
+  const ticketComponents = new Set((ticket?.fields?.components || []).map((component) => String(component?.name || '').trim().toLowerCase()).filter(Boolean));
+  const ticketLabels = new Set((ticket?.fields?.labels || []).map((label) => String(label || '').trim().toLowerCase()).filter(Boolean));
+
+  let best = null;
+  for (const objective of objectives || []) {
+    const objectiveTokens = new Set(tokenize(objectiveIssueText(objective)));
+    const objectiveComponents = new Set((objective?.fields?.components || []).map((component) => String(component?.name || '').trim().toLowerCase()).filter(Boolean));
+    const objectiveLabels = new Set((objective?.fields?.labels || []).map((label) => String(label || '').trim().toLowerCase()).filter(Boolean));
+
+    let overlap = 0;
+    for (const token of ticketTokens) {
+      if (objectiveTokens.has(token)) overlap += 1;
+    }
+    for (const component of ticketComponents) {
+      if (objectiveComponents.has(component)) overlap += 2;
+    }
+    for (const label of ticketLabels) {
+      if (objectiveLabels.has(label)) overlap += 1;
+    }
+
+    if (!best || overlap > best.score) {
+      best = {
+        score: overlap,
+        objectiveKey: objective?.key || '',
+        objectiveSummary: objective?.fields?.summary || '',
+      };
+    }
+  }
+
+  if (!best || best.score < 2) return null;
+  return {
+    ...best,
+    confidence: best.score >= 6 ? 'high' : best.score >= 4 ? 'medium' : 'low',
+  };
+}
+
+function refinementGapCodes(ticket, objectiveMatch) {
+  const gaps = [];
+  if (!extractRichText(ticket?.fields?.description)) gaps.push('description');
+  if (ticket.acceptanceScore < 5) gaps.push('acceptance');
+  if (!primaryComponentName(ticket)) gaps.push('product');
+  if (!objectiveMatch) gaps.push('objective');
+  return gaps;
+}
+
+function gapLabel(code, t) {
+  const labels = {
+    description: t.description,
+    acceptance: t.acceptanceCriteria,
+    product: t.productOrComponent,
+    objective: t.objective,
+  };
+  return labels[code] || code;
+}
+
+function createRefinementDraft(ticket) {
+  return {
+    summary: ticket?.fields?.summary || '',
+    description: extractRichText(ticket?.fields?.description) || '',
+    acceptanceCriteria: '',
+    componentName: primaryComponentName(ticket),
+  };
+}
+
+function normalizeAcceptanceLines(value) {
+  return String(value || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[-*•]\s*/, ''));
+}
+
+function buildDescriptionPayload(description, acceptanceCriteria) {
+  const sections = [];
+  const trimmedDescription = String(description || '').trim();
+  if (trimmedDescription) sections.push(trimmedDescription);
+
+  const criteria = normalizeAcceptanceLines(acceptanceCriteria);
+  if (criteria.length > 0) {
+    sections.push(`Acceptance Criteria\n${criteria.map((line) => `- ${line}`).join('\n')}`);
+  }
+
+  return sections.join('\n\n').trim();
+}
+
 function TicketDetailField({ label, value, multiline = false }) {
   return (
     <div className="ticket-detail-field">
@@ -246,7 +379,192 @@ function TicketDetailField({ label, value, multiline = false }) {
   );
 }
 
-function TicketDetailsModal({ ticket, t, jiraBaseUrl, onClose }) {
+function WorkflowStat({ label, value }) {
+  return (
+    <div className="workflow-stat">
+      <div className="workflow-stat-label">{label}</div>
+      <div className="workflow-stat-value">{value}</div>
+    </div>
+  );
+}
+
+function RefinementPanel({
+  candidates,
+  objectiveBoardName,
+  objectiveCoverage,
+  missingProductCount,
+  t,
+  onOpenTicket,
+  onGenerateRefinement,
+}) {
+  return (
+    <div className="workflow-panel">
+      <div className="workflow-panel-header">
+        <div>
+          <div className="workflow-panel-title">{t.refinementTitle}</div>
+          <div className="workflow-panel-subtitle">{t.refinementSubtitle}</div>
+        </div>
+        <div className="workflow-stat-grid">
+          <WorkflowStat label={t.refinementCandidates} value={candidates.length} />
+          <WorkflowStat label={t.missingProductAssignment} value={missingProductCount} />
+          <WorkflowStat label={t.objectiveCoverage} value={objectiveCoverage} />
+        </div>
+      </div>
+
+      <div className="workflow-meta-row">
+        <span className="workflow-chip">{t.objectiveBoard}: {objectiveBoardName || t.noData}</span>
+        <span className="workflow-chip">{t.syncStart}</span>
+      </div>
+
+      <div className="workflow-ticket-list">
+        {candidates.length === 0 && <div className="muted">{t.noIssues}</div>}
+        {candidates.slice(0, 6).map(({ ticket, gaps, objectiveMatch }) => (
+          <div key={ticket.key} className="workflow-ticket-item">
+            <div className="workflow-ticket-main">
+              <div className="workflow-ticket-head">
+                <span className="ticket-key">{ticket.key}</span>
+                <span className="workflow-ticket-summary">{ticket.fields.summary}</span>
+              </div>
+              <div className="workflow-ticket-tags">
+                {gaps.map((gap) => (
+                  <span key={`${ticket.key}-${gap}`} className="workflow-tag">
+                    {gapLabel(gap, t)}
+                  </span>
+                ))}
+                <span className="workflow-tag workflow-tag--dim">
+                  {primaryComponentName(ticket) || t.noProductAssigned}
+                </span>
+                <span className={`workflow-tag${objectiveMatch ? '' : ' workflow-tag--dim'}`}>
+                  {objectiveMatch ? `${objectiveMatch.objectiveKey}` : t.noObjectiveMatch}
+                </span>
+              </div>
+            </div>
+            <div className="workflow-ticket-actions">
+              <button className="btn-icon" type="button" onClick={() => onOpenTicket(ticket)}>
+                {t.details || t.ticket}
+              </button>
+              <button className="btn-primary" type="button" onClick={() => onGenerateRefinement(ticket)}>
+                <Sparkles size={12} />
+                {t.useLocalAi}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlanningPanel({
+  t,
+  planning,
+  onPlanningChange,
+  onSaveSprintGoal,
+  planningMessage,
+  planningTargetSprint,
+}) {
+  return (
+    <div className="workflow-panel">
+      <div className="workflow-panel-header">
+        <div>
+          <div className="workflow-panel-title">{t.planningTitle}</div>
+          <div className="workflow-panel-subtitle">{t.planningSubtitle}</div>
+        </div>
+      </div>
+
+      <div className="workflow-checklist">
+        <div className="workflow-section-title">{t.planningChecklistTitle}</div>
+        <ul>
+          {t.planningChecklist.map((entry) => (
+            <li key={entry}>{entry}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="workflow-form-grid">
+        <div className="ticket-detail-field">
+          <div className="ticket-detail-label">{t.sprintGoalDraft}</div>
+          <textarea
+            className="input workflow-textarea"
+            value={planning.sprintGoalDraft}
+            onChange={(event) => onPlanningChange('sprintGoalDraft', event.target.value)}
+            placeholder={planningTargetSprint?.name || t.noActiveSprint}
+          />
+        </div>
+        <div className="ticket-detail-field">
+          <div className="ticket-detail-label">{t.planningOpenQuestions}</div>
+          <textarea
+            className="input workflow-textarea"
+            value={planning.openQuestions}
+            onChange={(event) => onPlanningChange('openQuestions', event.target.value)}
+          />
+        </div>
+        <div className="ticket-detail-field">
+          <div className="ticket-detail-label">{t.planningTeamAbsences}</div>
+          <textarea
+            className="input workflow-textarea"
+            value={planning.teamAbsences}
+            onChange={(event) => onPlanningChange('teamAbsences', event.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="workflow-actions">
+        <button className="btn-primary" type="button" onClick={onSaveSprintGoal}>
+          <Save size={12} />
+          {t.saveSprintGoal}
+        </button>
+        {planningMessage && <span className="muted">{planningMessage}</span>}
+      </div>
+    </div>
+  );
+}
+
+function DailyPanel({ t, activeSprint, remainingDays }) {
+  return (
+    <div className="workflow-panel">
+      <div className="workflow-panel-header">
+        <div>
+          <div className="workflow-panel-title">{t.dailyTitle}</div>
+          <div className="workflow-panel-subtitle">{t.dailySubtitle}</div>
+        </div>
+        <div className="workflow-stat-grid">
+          <WorkflowStat label={t.sprintBacklog} value={activeSprint?.name || t.noActiveSprint} />
+          <WorkflowStat label={t.remainingSprintDays} value={remainingDays == null ? t.noData : remainingDays} />
+        </div>
+      </div>
+
+      <div className="workflow-checklist">
+        <div className="workflow-section-title">{t.dailyChecklistTitle}</div>
+        <ul>
+          {t.dailyChecklist.map((entry) => (
+            <li key={entry}>{entry}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="workflow-meta-row">
+        <span className="workflow-chip">{t.dailyScrumHint}</span>
+      </div>
+    </div>
+  );
+}
+
+function TicketDetailsModal({
+  ticket,
+  t,
+  jiraBaseUrl,
+  workflowMode,
+  availableComponents,
+  objectiveMatch,
+  objectiveBoardName,
+  refinementDraft,
+  onRefinementDraftChange,
+  onGenerateRefinement,
+  onApplyRefinement,
+  aiRefinement,
+  onClose,
+}) {
   if (!ticket) return null;
 
   const acceptanceMeta = getAcceptanceMeta(ticket.acceptanceScore, t);
@@ -261,6 +579,12 @@ function TicketDetailsModal({ ticket, t, jiraBaseUrl, onClose }) {
   const labels = formatList(ticket?.fields?.labels);
   const components = formatList((ticket?.fields?.components || []).map((component) => component?.name));
   const versions = formatList((ticket?.fields?.fixVersions || []).map((version) => version?.name));
+  const aiObjective = aiRefinement.result?.objectiveAlignment;
+  const displayedObjective = aiObjective?.objectiveKey
+    ? `${aiObjective.objectiveKey} · ${aiObjective.objectiveSummary || ''}`.trim()
+    : objectiveMatch
+      ? `${objectiveMatch.objectiveKey} · ${objectiveMatch.objectiveSummary || ''}`.trim()
+      : t.noObjectiveMatch;
 
   return (
     <div className="ticket-modal-overlay" onClick={onClose}>
@@ -294,10 +618,96 @@ function TicketDetailsModal({ ticket, t, jiraBaseUrl, onClose }) {
             <TicketDetailField label={t.labels} value={labels || t.noData} />
             <TicketDetailField label={t.components} value={components || t.noData} />
             <TicketDetailField label={t.fixVersions} value={versions || t.noData} />
+            <TicketDetailField label={t.objectiveBoard} value={objectiveBoardName || t.noData} />
+            <TicketDetailField label={t.objectiveAlignment} value={displayedObjective} />
           </div>
 
-          <TicketDetailField label={t.currentSprintGoal} value={ticket.sprints.find((sprint) => sprint.state === 'active')?.goal || ticket.sprints[0]?.goal || t.noSprintGoal} multiline />
+          <TicketDetailField
+            label={t.currentSprintGoal}
+            value={ticket.sprints.find((sprint) => sprint.state === 'active')?.goal || ticket.sprints[0]?.goal || t.noSprintGoal}
+            multiline
+          />
           <TicketDetailField label={t.description} value={descriptionText || t.noData} multiline />
+
+          {workflowMode === 'refinement' && (
+            <div className="refinement-editor">
+              <div className="refinement-editor-header">
+                <div>
+                  <div className="workflow-panel-title">{t.aiRefinementTitle}</div>
+                  <div className="workflow-panel-subtitle">{t.aiRefinementDescription}</div>
+                </div>
+                <button className="btn-primary" type="button" onClick={() => onGenerateRefinement(ticket)} disabled={aiRefinement.loading}>
+                  <Sparkles size={12} />
+                  {aiRefinement.loading ? t.loading : t.useLocalAi}
+                </button>
+              </div>
+
+              <div className="workflow-form-grid">
+                <div className="ticket-detail-field">
+                  <div className="ticket-detail-label">{t.refinedSummary}</div>
+                  <input
+                    className="input"
+                    value={refinementDraft.summary}
+                    onChange={(event) => onRefinementDraftChange('summary', event.target.value)}
+                  />
+                </div>
+
+                <div className="ticket-detail-field">
+                  <div className="ticket-detail-label">{t.productOrComponent}</div>
+                  <select
+                    className="input"
+                    value={refinementDraft.componentName}
+                    onChange={(event) => onRefinementDraftChange('componentName', event.target.value)}
+                  >
+                    <option value="">{t.noProductAssigned}</option>
+                    {availableComponents.map((component) => (
+                      <option key={component.id || component.name} value={component.name}>
+                        {component.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="ticket-detail-field">
+                  <div className="ticket-detail-label">{t.refinedDescription}</div>
+                  <textarea
+                    className="input workflow-textarea workflow-textarea--lg"
+                    value={refinementDraft.description}
+                    onChange={(event) => onRefinementDraftChange('description', event.target.value)}
+                  />
+                </div>
+
+                <div className="ticket-detail-field">
+                  <div className="ticket-detail-label">{t.acceptanceCriteria}</div>
+                  <textarea
+                    className="input workflow-textarea"
+                    value={refinementDraft.acceptanceCriteria}
+                    onChange={(event) => onRefinementDraftChange('acceptanceCriteria', event.target.value)}
+                  />
+                </div>
+              </div>
+
+              {aiRefinement.result?.openQuestions?.length > 0 && (
+                <div className="workflow-checklist">
+                  <div className="workflow-section-title">{t.openQuestionsTitle}</div>
+                  <ul>
+                    {aiRefinement.result.openQuestions.map((question, idx) => (
+                      <li key={`refine-question-${idx}`}>{question}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="workflow-actions">
+                <button className="btn-primary" type="button" onClick={onApplyRefinement} disabled={aiRefinement.saving}>
+                  <Save size={12} />
+                  {aiRefinement.saving ? t.loading : t.applyRefinement}
+                </button>
+                {aiRefinement.savedMessage && <span className="muted">{aiRefinement.savedMessage}</span>}
+                {aiRefinement.error && <span className="error-text">{aiRefinement.error}</span>}
+              </div>
+            </div>
+          )}
 
           <div className="ticket-detail-field">
             <div className="ticket-detail-label">{t.comments}</div>
@@ -333,6 +743,7 @@ function Section({
   onDragEnterLane,
   onOpenTicket,
   dropTargetLane,
+  objectiveMatches,
   allowDrop = true,
 }) {
   return (
@@ -366,6 +777,8 @@ function Section({
         <div className="ticket-table-header">
           <span>{t.ticket}</span>
           <span>{t.summary}</span>
+          <span>{t.productOrComponent}</span>
+          <span>{t.objective}</span>
           <span>{t.priority}</span>
           <span>{t.status}</span>
           <span>{t.daysOpen}</span>
@@ -380,6 +793,8 @@ function Section({
             {tickets.map((ticket, idx) => {
               const acceptanceMeta = getAcceptanceMeta(ticket.acceptanceScore, t);
               const acceptanceTone = ACCEPTANCE_LEVELS[ticket.acceptanceScore] || ACCEPTANCE_LEVELS[0];
+              const objectiveMatch = objectiveMatches[ticket.key] || null;
+              const productName = primaryComponentName(ticket);
               return (
                 <motion.button
                   key={safeIssueReactKey(ticket, idx)}
@@ -398,6 +813,15 @@ function Section({
                     <span className="ticket-key">{ticket.key}</span>
                   </span>
                   <span className="ticket-table-summary" title={ticket.fields.summary}>{ticket.fields.summary}</span>
+                  <span className={`ticket-table-product${productName ? '' : ' ticket-table-product--missing'}`}>
+                    {productName || t.noProductAssigned}
+                  </span>
+                  <span
+                    className={`ticket-table-objective${objectiveMatch ? '' : ' ticket-table-objective--missing'}`}
+                    title={objectiveMatch?.objectiveSummary || t.noObjectiveMatch}
+                  >
+                    {objectiveMatch ? objectiveMatch.objectiveKey : t.noObjectiveMatch}
+                  </span>
                   <span className="ticket-table-priority" style={{ color: PRIORITY_TONE[ticket.fields.priority?.name] || '#aaa' }}>
                     {ticket.fields.priority?.name || '—'}
                   </span>
@@ -423,15 +847,22 @@ function Section({
   );
 }
 
-export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
+export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflowMode, lang, onRefresh }) {
   const [q, setQ] = useState('');
   const [showArchive, setShowArchive] = useState(true);
   const [sprints, setSprints] = useState({});
   const [placements, setPlacements] = useState({});
+  const [planning, setPlanning] = useState(DEFAULT_PLANNING_STATE);
+  const [availableComponents, setAvailableComponents] = useState([]);
+  const [objectiveContext, setObjectiveContext] = useState({ board: null, issues: [] });
   const [dropTargetLane, setDropTargetLane] = useState('');
   const [persistReady, setPersistReady] = useState(false);
   const [persistError, setPersistError] = useState('');
+  const [projectContextError, setProjectContextError] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [refinementDraft, setRefinementDraft] = useState(createRefinementDraft(null));
+  const [aiRefinement, setAiRefinement] = useState(DEFAULT_AI_STATE);
+  const [planningMessage, setPlanningMessage] = useState('');
 
   const tickets = useMemo(
     () =>
@@ -455,6 +886,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
         setShowArchive(true);
         setSprints({});
         setPlacements({});
+        setPlanning(DEFAULT_PLANNING_STATE);
         setPersistError('');
         setPersistReady(false);
         setSelectedTicket(null);
@@ -468,12 +900,14 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
         setShowArchive(state.showArchive !== false);
         setSprints(state.sprints || {});
         setPlacements(state.placements || {});
+        setPlanning({ ...DEFAULT_PLANNING_STATE, ...(state.planning || {}) });
         setPersistError('');
       } catch (e) {
         if (cancelled) return;
         setShowArchive(true);
         setSprints({});
         setPlacements({});
+        setPlanning(DEFAULT_PLANNING_STATE);
         setPersistError(e?.response?.data?.error || e.message || 'Failed to load board state');
       } finally {
         if (!cancelled) setPersistReady(true);
@@ -481,6 +915,48 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
     }
 
     loadBoardState();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProjectContext() {
+      if (!projectKey) {
+        setAvailableComponents([]);
+        setObjectiveContext({ board: null, issues: [] });
+        setProjectContextError('');
+        return;
+      }
+
+      const [componentsRes, objectivesRes] = await Promise.allSettled([
+        api.jiraComponents(projectKey),
+        api.jiraObjectives(),
+      ]);
+
+      if (cancelled) return;
+
+      if (componentsRes.status === 'fulfilled') {
+        setAvailableComponents(componentsRes.value || []);
+      } else {
+        setAvailableComponents([]);
+      }
+
+      if (objectivesRes.status === 'fulfilled') {
+        setObjectiveContext(objectivesRes.value || { board: null, issues: [] });
+      } else {
+        setObjectiveContext({ board: null, issues: [] });
+      }
+
+      const errors = [];
+      if (componentsRes.status === 'rejected') errors.push(componentsRes.reason?.response?.data?.error || componentsRes.reason?.message || 'components');
+      if (objectivesRes.status === 'rejected') errors.push(objectivesRes.reason?.response?.data?.error || objectivesRes.reason?.message || 'objectives');
+      setProjectContextError(errors.join(' · '));
+    }
+
+    loadProjectContext();
     return () => {
       cancelled = true;
     };
@@ -500,7 +976,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
     async function persistBoardState() {
       if (!projectKey || !persistReady) return;
       try {
-        await api.saveBoardState(projectKey, { placements, sprints, showArchive });
+        await api.saveBoardState(projectKey, { placements, sprints, showArchive, planning });
         if (!cancelled) setPersistError('');
       } catch (e) {
         if (!cancelled) {
@@ -513,7 +989,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
     return () => {
       cancelled = true;
     };
-  }, [placements, persistReady, projectKey, showArchive, sprints]);
+  }, [placements, persistReady, planning, projectKey, showArchive, sprints]);
 
   const sprintList = useMemo(
     () => Object.values(sprints).sort((a, b) => sprintSortValue(a).localeCompare(sprintSortValue(b))),
@@ -522,6 +998,13 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
 
   const activeSprint = sprintList.find((sprint) => sprint.state === 'active') || null;
   const futureSprints = sprintList.filter((sprint) => sprint.state === 'future');
+  const planningTargetSprint = activeSprint || futureSprints[0] || null;
+
+  useEffect(() => {
+    if (!planning.sprintGoalDraft && planningTargetSprint?.goal) {
+      setPlanning((previous) => ({ ...previous, sprintGoalDraft: planningTargetSprint.goal }));
+    }
+  }, [planning.sprintGoalDraft, planningTargetSprint?.goal]);
 
   const filteredTickets = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -534,6 +1017,15 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
       );
     });
   }, [tickets, q]);
+
+  const objectiveMatches = useMemo(() => {
+    const out = {};
+    for (const ticket of tickets) {
+      const match = buildObjectiveMatch(ticket, objectiveContext.issues || []);
+      if (match) out[ticket.key] = match;
+    }
+    return out;
+  }, [objectiveContext.issues, tickets]);
 
   const ticketsByLane = useMemo(() => {
     const grouped = { backlog: [], archive: [] };
@@ -552,9 +1044,39 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
     for (const sprint of futureSprints) {
       count += (ticketsByLane[`sprint:${sprint.id}`] || []).length;
     }
-    if (showArchive) count += (ticketsByLane.archive || []).length;
+    if (showArchive && workflowMode === 'daily') count += (ticketsByLane.archive || []).length;
     return count;
-  }, [activeSprint, futureSprints, showArchive, ticketsByLane]);
+  }, [activeSprint, futureSprints, showArchive, ticketsByLane, workflowMode]);
+
+  const refinementCandidates = useMemo(
+    () =>
+      tickets
+        .filter((ticket) => !ticket.done)
+        .map((ticket) => ({
+          ticket,
+          objectiveMatch: objectiveMatches[ticket.key] || null,
+          gaps: refinementGapCodes(ticket, objectiveMatches[ticket.key] || null),
+        }))
+        .filter((entry) => entry.gaps.length > 0)
+        .sort((a, b) => b.gaps.length - a.gaps.length || b.ticket.daysOpen - a.ticket.daysOpen),
+    [objectiveMatches, tickets]
+  );
+
+  const currentSprintSubtitle = activeSprint
+    ? [
+        activeSprint.goal ? `${t.currentSprintGoal}: ${activeSprint.goal}` : `${t.currentSprintGoal}: ${t.noSprintGoal}`,
+        activeSprint.endDate ? `${t.remainingSprintDays}: ${formatRemainingDays(daysRemaining(activeSprint.endDate), t)}` : '',
+        activeSprint.startDate || activeSprint.endDate
+          ? `${formatDateLabel(activeSprint.startDate)}${activeSprint.endDate ? ` - ${formatDateLabel(activeSprint.endDate)}` : ''}`
+          : '',
+      ].filter(Boolean).join(' · ')
+    : t.noActiveSprint;
+
+  function openTicket(ticket) {
+    setSelectedTicket(ticket);
+    setRefinementDraft(createRefinementDraft(ticket));
+    setAiRefinement(DEFAULT_AI_STATE);
+  }
 
   function onDragStart(event, ticketKey) {
     event.dataTransfer.setData('text/plain', ticketKey);
@@ -576,6 +1098,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
     const startDate = now.toISOString();
     const endDate = new Date(now.getTime() + 14 * 86400000).toISOString();
     const candidate = futureSprints[0];
+    const draftGoal = planning.sprintGoalDraft.trim();
 
     if (candidate) {
       setSprints((previous) => ({
@@ -583,6 +1106,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
         [candidate.id]: {
           ...previous[candidate.id],
           state: 'active',
+          goal: draftGoal || previous[candidate.id]?.goal || '',
           startDate: previous[candidate.id]?.startDate || startDate,
           endDate: previous[candidate.id]?.endDate || endDate,
         },
@@ -597,7 +1121,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
         id,
         name: `Sprint ${Object.keys(previous).length + 1}`,
         state: 'active',
-        goal: '',
+        goal: draftGoal,
         startDate,
         endDate,
         completeDate: '',
@@ -626,15 +1150,92 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
     });
   }
 
-  const currentSprintSubtitle = activeSprint
-    ? [
-        activeSprint.goal ? `${t.currentSprintGoal}: ${activeSprint.goal}` : `${t.currentSprintGoal}: ${t.noSprintGoal}`,
-        activeSprint.endDate ? `${t.remainingSprintDays}: ${formatRemainingDays(daysRemaining(activeSprint.endDate), t)}` : '',
-        activeSprint.startDate || activeSprint.endDate
-          ? `${formatDateLabel(activeSprint.startDate)}${activeSprint.endDate ? ` - ${formatDateLabel(activeSprint.endDate)}` : ''}`
-          : '',
-      ].filter(Boolean).join(' · ')
-    : t.noActiveSprint;
+  function onPlanningChange(field, value) {
+    setPlanning((previous) => ({ ...previous, [field]: value }));
+    setPlanningMessage('');
+  }
+
+  function saveSprintGoal() {
+    const goal = planning.sprintGoalDraft.trim();
+    if (planningTargetSprint) {
+      setSprints((previous) => ({
+        ...previous,
+        [planningTargetSprint.id]: {
+          ...previous[planningTargetSprint.id],
+          goal,
+        },
+      }));
+    }
+    setPlanningMessage(t.saved);
+  }
+
+  function onRefinementDraftChange(field, value) {
+    setRefinementDraft((previous) => ({ ...previous, [field]: value }));
+    setAiRefinement((previous) => ({ ...previous, error: '', savedMessage: '' }));
+  }
+
+  async function generateRefinement(ticket = selectedTicket) {
+    if (!ticket) return;
+    setSelectedTicket(ticket);
+    setRefinementDraft(createRefinementDraft(ticket));
+    setAiRefinement({ ...DEFAULT_AI_STATE, loading: true });
+    try {
+      const result = await api.refineTicket({
+        lang,
+        ticket: {
+          key: ticket.key,
+          summary: ticket.fields.summary || '',
+          description: extractRichText(ticket.fields.description) || '',
+          comments: (ticket.fields.comment?.comments || []).map((comment) => extractRichText(comment.body)).filter(Boolean),
+          status: ticket.fields.status?.name || '',
+          priority: ticket.fields.priority?.name || '',
+          components: (ticket.fields.components || []).map((component) => component?.name).filter(Boolean),
+        },
+        availableComponents: availableComponents.map((component) => component.name),
+        objectiveCandidates: (objectiveContext.issues || []).map((issue) => ({
+          key: issue.key,
+          summary: issue.fields?.summary || '',
+          status: issue.fields?.status?.name || '',
+        })),
+      });
+
+      setAiRefinement({ ...DEFAULT_AI_STATE, result });
+      setRefinementDraft({
+        summary: result.refinedSummary || ticket.fields.summary || '',
+        description: result.refinedDescription || extractRichText(ticket.fields.description) || '',
+        acceptanceCriteria: (result.acceptanceCriteria || []).join('\n'),
+        componentName: result.productComponent?.name || primaryComponentName(ticket),
+      });
+    } catch (e) {
+      setAiRefinement({
+        ...DEFAULT_AI_STATE,
+        error: e?.response?.data?.error || e.message || 'AI refinement failed',
+      });
+    }
+  }
+
+  async function applyRefinement() {
+    if (!selectedTicket) return;
+    setAiRefinement((previous) => ({ ...previous, saving: true, error: '', savedMessage: '' }));
+    try {
+      const selectedComponent = availableComponents.find((component) => component.name === refinementDraft.componentName);
+      const fields = {
+        summary: refinementDraft.summary.trim() || selectedTicket.fields.summary,
+        description: buildDescriptionPayload(refinementDraft.description, refinementDraft.acceptanceCriteria),
+        components: selectedComponent ? [{ id: selectedComponent.id }] : [],
+      };
+
+      await api.updateIssue(selectedTicket.key, fields);
+      setAiRefinement((previous) => ({ ...previous, saving: false, savedMessage: t.refinementApplied }));
+      await onRefresh?.();
+    } catch (e) {
+      setAiRefinement((previous) => ({
+        ...previous,
+        saving: false,
+        error: e?.response?.data?.error || e.message || 'Failed to update ticket',
+      }));
+    }
+  }
 
   return (
     <div className="ticketlist sprint-board">
@@ -642,12 +1243,42 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
         <Search size={12} style={{ marginRight: 6, opacity: 0.5 }} />
         <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.search} />
         <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>{visibleTicketCount}</span>
-        <button className="btn-icon" onClick={() => setShowArchive((value) => !value)}>
-          {showArchive ? t.hideArchive : t.showArchive}
-        </button>
+        {workflowMode === 'daily' && (
+          <button className="btn-icon" onClick={() => setShowArchive((value) => !value)}>
+            {showArchive ? t.hideArchive : t.showArchive}
+          </button>
+        )}
       </div>
 
       {persistError && <div className="error-text">{persistError}</div>}
+      {projectContextError && workflowMode === 'refinement' && <div className="error-text">{projectContextError}</div>}
+
+      {workflowMode === 'refinement' && (
+        <RefinementPanel
+          candidates={refinementCandidates}
+          objectiveBoardName={objectiveContext.board?.name}
+          objectiveCoverage={`${Object.keys(objectiveMatches).length}/${tickets.length || 0}`}
+          missingProductCount={tickets.filter((ticket) => !primaryComponentName(ticket) && !ticket.done).length}
+          t={t}
+          onOpenTicket={openTicket}
+          onGenerateRefinement={generateRefinement}
+        />
+      )}
+
+      {workflowMode === 'planning' && (
+        <PlanningPanel
+          t={t}
+          planning={planning}
+          onPlanningChange={onPlanningChange}
+          onSaveSprintGoal={saveSprintGoal}
+          planningMessage={planningMessage}
+          planningTargetSprint={planningTargetSprint}
+        />
+      )}
+
+      {workflowMode === 'daily' && (
+        <DailyPanel t={t} activeSprint={activeSprint} remainingDays={daysRemaining(activeSprint?.endDate)} />
+      )}
 
       <div className="sprint-summary-card">
         <div className="sprint-summary-meta">
@@ -671,14 +1302,15 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onDragEnterLane={setDropTargetLane}
-          onOpenTicket={setSelectedTicket}
+          onOpenTicket={openTicket}
           dropTargetLane={dropTargetLane}
+          objectiveMatches={objectiveMatches}
           allowDrop={Boolean(activeSprint)}
         />
 
         <Section
           title={t.backlog}
-          subtitle={t.backlogHint}
+          subtitle={workflowMode === 'planning' ? t.planningSubtitle : t.backlogHint}
           count={(ticketsByLane.backlog || []).length}
           laneId="backlog"
           tickets={ticketsByLane.backlog || []}
@@ -687,8 +1319,9 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onDragEnterLane={setDropTargetLane}
-          onOpenTicket={setSelectedTicket}
+          onOpenTicket={openTicket}
           dropTargetLane={dropTargetLane}
+          objectiveMatches={objectiveMatches}
           allowDrop
         />
 
@@ -721,14 +1354,15 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
               onDragEnterLane={setDropTargetLane}
-              onOpenTicket={setSelectedTicket}
+              onOpenTicket={openTicket}
               dropTargetLane={dropTargetLane}
+              objectiveMatches={objectiveMatches}
               allowDrop
             />
           ))
         )}
 
-        {showArchive && (
+        {showArchive && workflowMode === 'daily' && (
           <Section
             title={t.archive}
             subtitle={t.archiveHint}
@@ -740,8 +1374,9 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             onDragEnterLane={setDropTargetLane}
-            onOpenTicket={setSelectedTicket}
+            onOpenTicket={openTicket}
             dropTargetLane={dropTargetLane}
+            objectiveMatches={objectiveMatches}
             allowDrop
           />
         )}
@@ -758,6 +1393,15 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl }) {
               ticket={selectedTicket}
               t={t}
               jiraBaseUrl={jiraBaseUrl}
+              workflowMode={workflowMode}
+              availableComponents={availableComponents}
+              objectiveMatch={objectiveMatches[selectedTicket.key] || null}
+              objectiveBoardName={objectiveContext.board?.name || ''}
+              refinementDraft={refinementDraft}
+              onRefinementDraftChange={onRefinementDraftChange}
+              onGenerateRefinement={generateRefinement}
+              aiRefinement={aiRefinement}
+              onApplyRefinement={applyRefinement}
               onClose={() => setSelectedTicket(null)}
             />
           </motion.div>

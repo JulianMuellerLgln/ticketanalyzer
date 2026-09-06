@@ -12,15 +12,23 @@ export const api = {
     axios.put(`${BASE}/board-state/${encodeURIComponent(key)}`, payload).then((r) => r.data),
   refresh: (key) => axios.post(`${BASE}/refresh/${key}`).then((r) => r.data),
   jiraHealth: () => axios.get(`${BASE}/jira/health`).then((r) => r.data),
+  jiraComponents: (projectKey) =>
+    axios.get(`${BASE}/jira/components/${encodeURIComponent(projectKey)}`).then((r) => r.data),
+  jiraObjectives: () =>
+    axios.get(`${BASE}/jira/objectives`).then((r) => r.data),
   jiraIssueTypes: (projectKey) =>
     axios.get(`${BASE}/jira/issue-types/${encodeURIComponent(projectKey)}`).then((r) => r.data),
   jiraCreateMeta: (projectKey, issueType) =>
     axios
       .get(`${BASE}/jira/create-meta/${encodeURIComponent(projectKey)}/${encodeURIComponent(issueType)}`)
       .then((r) => r.data),
+  updateIssue: (issueKey, fields) =>
+    axios.put(`${BASE}/jira/issues/${encodeURIComponent(issueKey)}`, { fields }).then((r) => r.data),
   llmHealth: () => axios.get(`${BASE}/llm/health`).then((r) => r.data),
   analyze: (key, lang) =>
     axios.post(`${BASE}/llm/analyze/${key}`, {}, { params: { lang } }).then((r) => r.data),
+  refineTicket: (payload) =>
+    axios.post(`${BASE}/llm/refine-ticket`, payload).then((r) => r.data),
   evaluateIdea: (idea, lang) =>
     axios.post(`${BASE}/llm/evaluate-idea`, { idea, lang }).then((r) => r.data),
 

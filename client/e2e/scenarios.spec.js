@@ -48,6 +48,7 @@ test('Szenario 2: Projekt auswählen und Tickets laden', async ({ page }) => {
   await expect(page.locator('.ticket-table-row', { hasText: 'Fix dashboard crash on mobile' })).toBeVisible();
   await expect(page.locator('.ticket-table-row', { hasText: 'Add dark mode toggle' })).toBeVisible();
   await expect(page.locator('.ticket-table-row', { hasText: 'Improve search performance' })).toBeVisible();
+  await expect(page.locator('.ticket-table-row', { hasText: 'MOD-1' })).toBeVisible();
   await expect(page.getByText('5 · well defined')).toBeVisible();
   await expect(page.getByText('1 · ok')).toBeVisible();
   await expect(page.locator('.ticket-table-acceptance', { hasText: '0 · missing' })).toHaveCount(2);
@@ -258,18 +259,75 @@ test('Szenario 9: Ticketdetails anzeigen', async ({ page }) => {
 
   await page.locator('.ticket-table-row', { hasText: 'Implement login flow' }).click();
 
-  await expect(page.locator('.ticket-modal')).toBeVisible();
-  await expect(page.getByText('Grace Hopper')).toBeVisible();
-  await expect(page.getByText('Ada Lovelace')).toBeVisible();
-  await expect(page.getByText('Portal UI')).toBeVisible();
-  await expect(page.getByText('2026.09')).toBeVisible();
-  await expect(page.getByText('Alan Turing')).toBeVisible();
-  await expect(page.getByText('Please keep the validation errors inline')).toBeVisible();
+  const modal = page.locator('.ticket-modal');
+  await expect(modal).toBeVisible();
+  await expect(modal.getByText('Grace Hopper')).toBeVisible();
+  await expect(modal.getByText('Ada Lovelace')).toBeVisible();
+  await expect(modal.getByText('Portal UI')).toBeVisible();
+  await expect(modal.getByText('2026.09')).toBeVisible();
+  await expect(modal.getByText('Alan Turing')).toBeVisible();
+  await expect(modal.getByText('Please keep the validation errors inline')).toBeVisible();
+  await expect(modal.getByText('MOD-1 · Modernize login and onboarding flow')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/09a_ticket_modal.png', fullPage: true });
 
   await page.locator('.ticket-modal .icon-btn').click();
   await expect(page.locator('.ticket-modal')).not.toBeVisible();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 12: Modus wechseln und Scrum Guide anzeigen
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 12: Arbeitsmodi und Scrum Guide', async ({ page }) => {
+  await setupMocks(page);
+  await page.goto('/');
+  await page.locator('.toolbar select.input').selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  await page.getByRole('button', { name: 'Planning' }).click();
+  await expect(page.getByText('Planning focus')).toBeVisible();
+  await expect(page.getByText('Sprint goal draft')).toBeVisible();
+
+  const goalDraft = page.locator('.workflow-textarea').first();
+  await goalDraft.fill('Reduce onboarding support load through stable login flows');
+  await page.getByRole('button', { name: 'Save sprint goal' }).click();
+  await expect(page.getByText('Saved')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Scrum Guide' }).click();
+  await expect(page.getByText('Scrum Guide essentials')).toBeVisible();
+  await expect(page.getByText('Commitment')).toBeVisible();
+  await expect(page.getByText('What Sprint Planning means')).toBeVisible();
+  await page.locator('.scrum-guide-modal .icon-btn').click();
+  await expect(page.getByText('Scrum Guide essentials')).toHaveCount(0);
+
+  await page.screenshot({ path: 'e2e/screenshots/12a_modes_and_guide.png', fullPage: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 13: Refinement mit lokaler KI
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 13: Refinement mit lokaler KI', async ({ page }) => {
+  await setupMocks(page);
+  await page.goto('/');
+  await page.locator('.toolbar select.input').selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  await page.getByRole('button', { name: 'Refinement' }).click();
+  await expect(page.getByText('Refinement focus')).toBeVisible();
+  await expect(page.getByText('Modernisierungs Board')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Use local AI' }).first().click();
+  await expect(page.getByText('AI refinement')).toBeVisible();
+  const refinementEditor = page.locator('.refinement-editor');
+  await expect(refinementEditor.locator('input').first()).toHaveValue('Implement secure OAuth2 login flow');
+  await expect(refinementEditor.locator('.workflow-textarea--lg')).toHaveValue(/Provide OAuth2 login/);
+  await expect(refinementEditor.locator('.workflow-textarea').nth(1)).toHaveValue(/OAuth2 login succeeds for valid users\./);
+  await expect(page.getByText('Do we need migration support for existing sessions?')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Apply to Jira' }).click();
+  await expect(page.getByText('Refinement applied to Jira.')).toBeVisible();
+
+  await page.screenshot({ path: 'e2e/screenshots/13a_refinement_ai.png', fullPage: true });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -306,8 +364,23 @@ test('Szenario 11: Drag and Drop Persistenz', async ({ page }) => {
 
   const ticketRow = page.locator('.ticket-table-row', { hasText: 'Fix dashboard crash on mobile' });
   const futureSprint = page.locator('.sprint-section').filter({ hasText: 'Sprint 25' });
+  await expect(ticketRow).toBeVisible();
+  await expect(futureSprint).toBeVisible();
 
-  await ticketRow.dragTo(futureSprint);
+  await page.evaluate(() => {
+    const source = Array.from(document.querySelectorAll('.ticket-table-row'))
+      .find((element) => element.textContent?.includes('Fix dashboard crash on mobile'));
+    const target = Array.from(document.querySelectorAll('.sprint-section'))
+      .find((element) => element.textContent?.includes('Sprint 25'));
+    if (!source || !target) throw new Error('Drag source or target not found');
+
+    const dataTransfer = new DataTransfer();
+    source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }));
+    target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer }));
+    target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
+    target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+    source.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer }));
+  });
   await page.waitForTimeout(400);
   await expect(futureSprint.getByText('Fix dashboard crash on mobile')).toBeVisible();
 

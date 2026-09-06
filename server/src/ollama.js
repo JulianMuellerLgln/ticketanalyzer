@@ -176,4 +176,73 @@ Language rule:
 Return ONLY valid JSON.`;
 }
 
-module.exports = { checkHealth, chat, buildAnalysisPrompt, buildIdeaEvalPrompt };
+function buildRefinementPrompt({
+ticket,
+availableComponents = [],
+objectiveCandidates = [],
+lang = 'en',
+}) {
+const langIntro = lang === 'de'
+  ? 'Antworte strikt auf Deutsch als technischer Product Owner in einem Scrum-Umfeld. Schreibe alle Freitext-Felder auf Deutsch.'
+  : 'Reply in English as a technical Product Owner working in Scrum.';
+
+const compactTicket = {
+  key: ticket?.key || null,
+  summary: ticket?.summary || '',
+  description: ticket?.description || '',
+  comments: Array.isArray(ticket?.comments) ? ticket.comments.slice(0, 8) : [],
+  status: ticket?.status || '',
+  priority: ticket?.priority || '',
+  currentComponents: Array.isArray(ticket?.components) ? ticket.components : [],
+};
+
+const simplifiedObjectives = objectiveCandidates.slice(0, 12).map((objective) => ({
+  key: objective?.key || null,
+  summary: objective?.summary || '',
+  status: objective?.status || '',
+}));
+
+return `${langIntro}
+
+You are helping refine a Jira ticket before Sprint Planning.
+Use Scrum Product Backlog refinement principles: make the item clearer, more precise, and easier to discuss or select in planning.
+
+Ticket:
+${JSON.stringify(compactTicket, null, 2)}
+
+Available product/component values for this Jira project:
+${JSON.stringify(availableComponents, null, 2)}
+
+Possible objective tickets from a modernization board:
+${JSON.stringify(simplifiedObjectives, null, 2)}
+
+Respond with ONLY valid JSON in exactly this shape:
+{
+"refinedSummary": "clearer backlog item title",
+"refinedDescription": "improved description text ready for Jira",
+"acceptanceCriteria": ["criterion 1", "criterion 2"],
+"productComponent": {
+  "name": "one component name from the provided list or empty string",
+  "reason": "short reason"
+},
+"objectiveAlignment": {
+  "objectiveKey": "OBJECTIVE-1 or null",
+  "objectiveSummary": "summary or empty string",
+  "confidence": "high|medium|low",
+  "reason": "why this does or does not align"
+},
+"openQuestions": ["question 1", "question 2"]
+}
+
+Rules:
+- Do not invent Jira keys, objectives, or component names.
+- productComponent.name must either match one provided component exactly or be an empty string.
+- If no objective is a credible fit, set objectiveKey to null and objectiveSummary to an empty string.
+- Make acceptance criteria concrete and testable.
+- Keep the refined description practical for software delivery teams.
+- Mention missing information as open questions instead of inventing it.
+
+Return ONLY valid JSON.`;
+}
+
+module.exports = { checkHealth, chat, buildAnalysisPrompt, buildIdeaEvalPrompt, buildRefinementPrompt };

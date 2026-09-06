@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, Globe } from 'lucide-react';
+import { RefreshCw, Globe, BookOpenText } from 'lucide-react';
 
 import { api } from './api';
 import { i18n } from './i18n';
@@ -10,6 +10,7 @@ import LLMInsights from './components/LLMInsights';
 import IdeaEvaluator from './components/IdeaEvaluator';
 import Roadmap from './components/Roadmap';
 import JiraSync from './components/JiraSync';
+import ScrumGuideModal from './components/ScrumGuideModal';
 
 function Widget({ title, children, className = '' }) {
   const [expanded, setExpanded] = useState(false);
@@ -34,6 +35,8 @@ function Widget({ title, children, className = '' }) {
 export default function App() {
   const [lang, setLang] = useState('en');
   const t = i18n[lang];
+  const [workflowMode, setWorkflowMode] = useState('daily');
+  const [showScrumGuide, setShowScrumGuide] = useState(false);
 
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState('');
@@ -150,14 +153,39 @@ export default function App() {
           </button>
         </div>
 
-        <button
-          className="btn-icon lang-btn"
-          onClick={() => setLang((l) => l === 'en' ? 'de' : 'en')}
-          title="Switch language"
-        >
-          <Globe size={13} style={{ marginRight: 4 }} />
-          {lang === 'en' ? 'DE' : 'EN'}
-        </button>
+        <div className="mode-switch" role="tablist" aria-label={t.workflowMode}>
+          {['refinement', 'planning', 'daily'].map((mode) => (
+            <button
+              key={mode}
+              className={`mode-switch-btn${workflowMode === mode ? ' mode-switch-btn--active' : ''}`}
+              onClick={() => setWorkflowMode(mode)}
+              type="button"
+            >
+              {t.workflowModes[mode]}
+            </button>
+          ))}
+        </div>
+
+        <div className="toolbar-right">
+          <button
+            className="btn-icon"
+            onClick={() => setShowScrumGuide(true)}
+            title={t.scrumGuideTitle}
+            type="button"
+          >
+            <BookOpenText size={14} />
+            {t.scrumGuideButton}
+          </button>
+
+          <button
+            className="btn-icon lang-btn"
+            onClick={() => setLang((l) => l === 'en' ? 'de' : 'en')}
+            title="Switch language"
+          >
+            <Globe size={13} style={{ marginRight: 4 }} />
+            {lang === 'en' ? 'DE' : 'EN'}
+          </button>
+        </div>
       </div>
 
       <div className="canvas">
@@ -167,7 +195,15 @@ export default function App() {
             title={t.sprintBoard}
             className="widget--wide"
           >
-            <TicketList issues={issues} projectKey={selectedProject} t={t} jiraBaseUrl={jiraBaseUrl} />
+            <TicketList
+              issues={issues}
+              projectKey={selectedProject}
+              t={t}
+              jiraBaseUrl={jiraBaseUrl}
+              workflowMode={workflowMode}
+              lang={lang}
+              onRefresh={doRefresh}
+            />
           </Widget>
 
           <Widget key="widget-insights" title={t.insights}>
@@ -187,6 +223,8 @@ export default function App() {
           </Widget>
         </AnimatePresence>
       </div>
+
+      <ScrumGuideModal open={showScrumGuide} onClose={() => setShowScrumGuide(false)} t={t} />
     </div>
   );
 }

@@ -49,6 +49,11 @@ test('GET /api/board-state returns sanitized defaults for unknown projects', asy
     placements: {},
     sprints: {},
     showArchive: true,
+    planning: {
+      sprintGoalDraft: '',
+      openQuestions: '',
+      teamAbsences: '',
+    },
   });
 });
 
@@ -91,6 +96,11 @@ test('PUT /api/board-state persists only supported board state fields', async (t
       'broken-sprint': 'nope',
     },
     showArchive: false,
+    planning: {
+      sprintGoalDraft: 'Reduce onboarding support load',
+      openQuestions: 'Do we need SSO parity?',
+      teamAbsences: 'Ada out on Friday',
+    },
     ignoredTopLevel: true,
   };
 
@@ -116,6 +126,11 @@ test('PUT /api/board-state persists only supported board state fields', async (t
       },
     },
     showArchive: false,
+    planning: {
+      sprintGoalDraft: 'Reduce onboarding support load',
+      openQuestions: 'Do we need SSO parity?',
+      teamAbsences: 'Ada out on Friday',
+    },
   };
 
   assert.equal(putResponse.status, 200);

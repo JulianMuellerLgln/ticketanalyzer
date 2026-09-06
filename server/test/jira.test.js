@@ -5,6 +5,7 @@ const {
   DEFAULT_SPRINT_FIELD_IDS,
   fetchIssues,
   fetchSprintFieldIds,
+  pickObjectiveBoard,
   __resetSprintFieldIdsForTests,
 } = require('../src/jira');
 
@@ -85,4 +86,14 @@ test('fetchIssues rejects invalid project keys before calling Jira', async () =>
   };
 
   await assert.rejects(() => fetchIssues(client, 'team-3d'), /Invalid project key: team-3d/);
+});
+
+test('pickObjectiveBoard prefers modernization-style objective boards', () => {
+  const result = pickObjectiveBoard([
+    { id: 1, name: 'Team Board' },
+    { id: 2, name: 'Modernisierungs Board' },
+    { id: 3, name: 'Objectives 2026' },
+  ]);
+
+  assert.deepEqual(result, { id: 2, name: 'Modernisierungs Board' });
 });

@@ -337,6 +337,57 @@ async function fetchBoards() {
   return res.data.values || [];
 }
 
+function objectiveBoardScore(board) {
+  const name = String(board?.name || '').toLowerCase();
+  if (!name) return -1;
+  let score = 0;
+  if (name.includes('modernis')) score += 5;
+  if (name.includes('objective')) score += 4;
+  if (name.includes('ziel')) score += 3;
+  if (name.includes('strategy') || name.includes('strateg')) score += 2;
+  return score;
+}
+
+function pickObjectiveBoard(boards = []) {
+  return [...boards]
+    .map((board) => ({ board, score: objectiveBoardScore(board) }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || String(a.board?.name || '').localeCompare(String(b.board?.name || '')))[0]
+    ?.board || null;
+}
+
+async function fetchBoardIssues(boardId, maxResults = 50) {
+  const agileClient = buildAgileClient();
+  if (!agileClient) {
+    const status = getJiraConfigStatus();
+    throw new Error(status.message);
+  }
+  const res = await agileClient.get(`/board/${encodeURIComponent(boardId)}/issue`, {
+    params: {
+      maxResults,
+      fields: 'summary,description,status,labels,components',
+    },
+  });
+  return res.data?.issues || [];
+}
+
+async function fetchObjectives(maxResults = 50) {
+  const boards = await fetchBoards();
+  const board = pickObjectiveBoard(boards);
+  if (!board?.id) {
+    return { board: null, issues: [] };
+  }
+  const issues = await fetchBoardIssues(board.id, maxResults);
+  return {
+    board: {
+      id: board.id,
+      name: board.name,
+      type: board.type,
+    },
+    issues,
+  };
+}
+
 async function fetchProjectComponents(client, projectKey) {
   const res = await client.get(`/project/${encodeURIComponent(projectKey)}/components`);
   return (res.data || []).map((c) => ({
@@ -369,6 +420,14 @@ async function createIssue(client, projectKey, ticket = {}) {
   return res.data; // { id, key, self }
 }
 
+async function updateIssue(client, issueKey, fields = {}) {
+  if (!/^[A-Z][A-Z0-9]+-\d+$/.test(issueKey)) {
+    throw new Error(`Invalid issue key: ${issueKey}`);
+  }
+  await client.put(`/issue/${encodeURIComponent(issueKey)}`, { fields });
+  return { ok: true, key: issueKey };
+}
+
 module.exports = {
   DEFAULT_SPRINT_FIELD_IDS,
   buildJiraClient,
@@ -376,10 +435,14 @@ module.exports = {
   fetchIssues,
   fetchSprintFieldIds,
   fetchBoards,
+  fetchBoardIssues,
+  fetchObjectives,
   fetchProjectComponents,
   fetchIssueTypes,
   fetchCreateMeta,
   createIssue,
+  updateIssue,
+  pickObjectiveBoard,
   getJiraConfigStatus,
   classifyJiraError,
   __resetSprintFieldIdsForTests: () => {

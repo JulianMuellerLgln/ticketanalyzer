@@ -36,6 +36,51 @@ export async function setupMocks(page, overrides = {}) {
         },
       },
     },
+    objectiveContext: {
+      board: { id: 77, name: 'Modernisierungs Board', type: 'scrum' },
+      issues: [
+        {
+          key: 'MOD-1',
+          fields: {
+            summary: 'Modernize login and onboarding flow',
+            status: { name: 'Open' },
+            labels: ['auth'],
+            components: [{ name: 'Portal UI' }],
+          },
+        },
+        {
+          key: 'MOD-2',
+          fields: {
+            summary: 'Improve customer self-service experience',
+            status: { name: 'Open' },
+            labels: ['self-service'],
+            components: [],
+          },
+        },
+      ],
+    },
+    refineTicket: {
+      refinedSummary: 'Implement secure OAuth2 login flow',
+      refinedDescription: 'Provide OAuth2 login with clear failure handling and persistent session behavior for end users.',
+      acceptanceCriteria: [
+        'OAuth2 login succeeds for valid users.',
+        'Authentication errors are shown inline.',
+        'The active session survives a page refresh.',
+      ],
+      productComponent: {
+        name: 'Portal UI',
+        reason: 'The affected user journey is handled in the Portal UI.',
+      },
+      objectiveAlignment: {
+        objectiveKey: 'MOD-1',
+        objectiveSummary: 'Modernize login and onboarding flow',
+        confidence: 'high',
+        reason: 'The ticket directly supports the login modernization objective.',
+      },
+      openQuestions: [
+        'Do we need migration support for existing sessions?',
+      ],
+    },
     issues: {
       lastRefresh: new Date().toISOString(),
       issues: [
@@ -87,6 +132,7 @@ export async function setupMocks(page, overrides = {}) {
             status: { name: 'Open' },
             description: 'Acceptance criteria: app should no longer crash on iOS Safari.',
             created: new Date(Date.now() - 12 * 86400000).toISOString(),
+            labels: ['ios', 'self-service'],
           },
         },
         {
@@ -193,6 +239,12 @@ export async function setupMocks(page, overrides = {}) {
     }
     await route.fulfill({ json: boardState });
   });
+  await page.route('**/api/jira/components/**', (route) =>
+    route.fulfill({ json: [{ id: 'c1', name: 'Portal UI' }, { id: 'c2', name: 'Checkout' }] })
+  );
+  await page.route('**/api/jira/objectives', (route) =>
+    route.fulfill({ json: mocks.objectiveContext })
+  );
   await page.route('**/api/jira/issue-types/**', (route) =>
     route.fulfill({ json: mocks.issueTypes })
   );
@@ -207,6 +259,12 @@ export async function setupMocks(page, overrides = {}) {
   );
   await page.route('**/api/llm/evaluate-idea', (route) =>
     route.fulfill({ json: mocks.evaluateIdea })
+  );
+  await page.route('**/api/llm/refine-ticket', (route) =>
+    route.fulfill({ json: mocks.refineTicket })
+  );
+  await page.route('**/api/jira/issues/**', (route) =>
+    route.fulfill({ json: { ok: true } })
   );
   await page.route('**/api/jira/sync', async (route) => {
     // Simulate a streaming SSE response with progress events
