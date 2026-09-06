@@ -6,9 +6,9 @@ Draggable dashboard for technical Product Owners. Connects to Jira Data Center a
 
 - **Refinement**: identify under-specified backlog items, enrich them with local AI, review acceptance criteria, assign products/components, and inspect likely objective matches from the modernization board.
 - **Planning**: order backlog items, capture open questions and absences, define a Sprint Goal, and start the Sprint.
-- **Daily business**: keep the Sprint Goal visible during execution and adapt the Sprint Backlog as work evolves.
+- **Daily business**: keep the Sprint Goal visible during execution, generate local-AI hints for sensible plan changes, and adapt the Sprint Backlog as work evolves.
 
-The UI also includes a Scrum Guide pop-out with the five Scrum values and the most relevant current guide guidance for software teams.
+The UI also includes a Scrum Guide pop-out with the five Scrum values and the most relevant current guide guidance for software teams, plus visible team-facing defaults for a Definition of Ready and Definition of Done.
 
 ## Setup
 

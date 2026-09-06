@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import MiddleScrollArea from './MiddleScrollArea';
 
 export default function ScrumGuideModal({ open, onClose, t }) {
   if (!open) return null;
@@ -18,7 +19,7 @@ export default function ScrumGuideModal({ open, onClose, t }) {
           </button>
         </div>
 
-        <div className="ticket-modal-body scrum-guide-body">
+        <MiddleScrollArea className="ticket-modal-body scrum-guide-body">
           <section className="guide-section">
             <h4>{t.scrumValuesTitle}</h4>
             <ul>
@@ -63,7 +64,7 @@ export default function ScrumGuideModal({ open, onClose, t }) {
               ))}
             </ul>
           </section>
-        </div>
+        </MiddleScrollArea>
       </div>
     </div>
   );

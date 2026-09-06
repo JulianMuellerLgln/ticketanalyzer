@@ -108,7 +108,7 @@ export async function setupMocks(page, overrides = {}) {
                   id: 'comment-1',
                   created: new Date(Date.now() - 1 * 86400000).toISOString(),
                   author: { displayName: 'Alan Turing' },
-                  body: 'Please keep the validation errors inline and preserve the existing session cookie flow.',
+                  body: 'Please keep the validation errors inline, preserve the existing session cookie flow, and check [Runbook|https://example.com/runbook].',
                 },
               ],
             },

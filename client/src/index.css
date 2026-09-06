@@ -226,6 +226,12 @@ html, body {
   padding: 12px;
 }
 
+.middle-scroll-area--panning,
+.middle-scroll-area--panning * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
 /* ── Inputs ──────────────────────────────────────────────────────────────── */
 .input {
   background: var(--bg3);
@@ -536,6 +542,28 @@ html, body {
 }
 
 .workflow-checklist ul {
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.daily-advice-grid,
+.definition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.definition-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.definition-list {
+  margin: 8px 0 0;
   padding-left: 18px;
   display: grid;
   gap: 6px;
@@ -870,6 +898,16 @@ html, body {
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.inline-link {
+  color: #8ab4ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.inline-link:hover {
+  color: #b8d1ff;
 }
 
 .refinement-editor {

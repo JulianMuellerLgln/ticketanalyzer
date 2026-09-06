@@ -94,7 +94,7 @@ test('Szenario 3: LLM-Analyse starten', async ({ page }) => {
   await expect(page.getByText('Confidence')).not.toBeVisible();
 
   // Suggestions-Sektion soll aufgeklappt sein
-  await expect(page.getByText('Suggestions')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Suggestions' })).toBeVisible();
   await expect(page.getByText('Mobile crash is critical')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/03a_llm_analysis.png', fullPage: true });
@@ -268,6 +268,7 @@ test('Szenario 9: Ticketdetails anzeigen', async ({ page }) => {
   await expect(modal.getByText('Alan Turing')).toBeVisible();
   await expect(modal.getByText('Please keep the validation errors inline')).toBeVisible();
   await expect(modal.getByText('MOD-1 · Modernize login and onboarding flow')).toBeVisible();
+  await expect(modal.getByRole('link', { name: 'Runbook' })).toHaveAttribute('href', 'https://example.com/runbook');
 
   await page.screenshot({ path: 'e2e/screenshots/09a_ticket_modal.png', fullPage: true });
 
@@ -287,11 +288,20 @@ test('Szenario 12: Arbeitsmodi und Scrum Guide', async ({ page }) => {
   await page.getByRole('button', { name: 'Planning' }).click();
   await expect(page.getByText('Planning focus')).toBeVisible();
   await expect(page.getByText('Sprint goal draft')).toBeVisible();
+  await expect(page.getByText('Definition of Ready / Done')).toBeVisible();
+  await expect(page.getByText('Definition of Ready', { exact: true })).toBeVisible();
+  await expect(page.getByText('Definition of Done', { exact: true })).toBeVisible();
 
   const goalDraft = page.locator('.workflow-textarea').first();
   await goalDraft.fill('Reduce onboarding support load through stable login flows');
   await page.getByRole('button', { name: 'Save sprint goal' }).click();
   await expect(page.getByText('Saved')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Daily business' }).click();
+  await expect(page.getByText('Daily business focus')).toBeVisible();
+  await page.getByRole('button', { name: 'Generate AI hints' }).click();
+  await expect(page.getByText('Potential plan changes')).toBeVisible();
+  await expect(page.getByText('AXON-2: Mobile crash is critical – assign immediately.')).toBeVisible();
 
   await page.getByRole('button', { name: 'Scrum Guide' }).click();
   await expect(page.getByText('Scrum Guide essentials')).toBeVisible();
@@ -339,6 +349,7 @@ test('Szenario 10: Persistierte Board-Ansicht laden', async ({ page }) => {
       showArchive: false,
       placements: {
         'AXON-2': 'sprint:11',
+        'AXON-4': 'backlog',
       },
     },
   });
@@ -349,6 +360,7 @@ test('Szenario 10: Persistierte Board-Ansicht laden', async ({ page }) => {
   const sprintBacklog = page.locator('.sprint-section').first();
   await expect(page.locator('.sprint-section-title').filter({ hasText: /^Archive$/ })).toHaveCount(0);
   await expect(sprintBacklog.getByText('Fix dashboard crash on mobile')).toBeVisible();
+  await expect(page.locator('.ticket-table-row', { hasText: 'Improve search performance' })).toHaveCount(0);
 
   await page.screenshot({ path: 'e2e/screenshots/10a_persisted_board.png', fullPage: true });
 });
@@ -392,4 +404,55 @@ test('Szenario 11: Drag and Drop Persistenz', async ({ page }) => {
   await expect(futureSprintAfterReload.getByText('Fix dashboard crash on mobile')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/11a_dragdrop_persisted.png', fullPage: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 14: Middle-Mouse-Panning scrollt den aktiven Bereich
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 14: Middle-Mouse-Panning scrollt Widget-Inhalte', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 520 });
+  await setupMocks(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Scrum Guide' }).click();
+  await expect(page.locator('.scrum-guide-modal')).toBeVisible();
+
+  const scrollArea = page.locator('.scrum-guide-modal .ticket-modal-body');
+  await expect(scrollArea).toBeVisible();
+
+  const after = await scrollArea.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const startY = rect.top + Math.min(rect.height - 20, 220);
+    const moveY = rect.top + 80;
+    const before = element.scrollTop;
+
+    element.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 1,
+      buttons: 4,
+      clientX: centerX,
+      clientY: startY,
+    }));
+    window.dispatchEvent(new MouseEvent('mousemove', {
+      bubbles: true,
+      cancelable: true,
+      button: 1,
+      buttons: 4,
+      clientX: centerX,
+      clientY: moveY,
+    }));
+    window.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      button: 1,
+      buttons: 0,
+      clientX: centerX,
+      clientY: moveY,
+    }));
+
+    return { before, after: element.scrollTop };
+  });
+
+  expect(after.after).toBeGreaterThan(after.before);
 });

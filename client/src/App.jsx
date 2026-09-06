@@ -11,6 +11,7 @@ import IdeaEvaluator from './components/IdeaEvaluator';
 import Roadmap from './components/Roadmap';
 import JiraSync from './components/JiraSync';
 import ScrumGuideModal from './components/ScrumGuideModal';
+import MiddleScrollArea from './components/MiddleScrollArea';
 
 function Widget({ title, children, className = '' }) {
   const [expanded, setExpanded] = useState(false);
@@ -27,7 +28,7 @@ function Widget({ title, children, className = '' }) {
           {expanded ? '⊡' : '⊞'}
         </button>
       </div>
-      <div className="widget-body">{children}</div>
+      <MiddleScrollArea className="widget-body">{children}</MiddleScrollArea>
     </div>
   );
 }

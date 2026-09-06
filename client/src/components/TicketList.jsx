@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Save, Search, Sparkles, X } from 'lucide-react';
 import { api } from '../api';
 import TicketLink from './TicketLink';
+import MiddleScrollArea from './MiddleScrollArea';
 
 const PRIORITY_TONE = {
   Highest: '#e53e3e',
@@ -29,6 +30,12 @@ const DEFAULT_AI_STATE = {
   saving: false,
   error: '',
   savedMessage: '',
+  result: null,
+};
+
+const DEFAULT_DAILY_ADVICE_STATE = {
+  loading: false,
+  error: '',
   result: null,
 };
 
@@ -68,7 +75,15 @@ function extractRichText(node) {
   if (typeof node === 'string') return node;
   if (Array.isArray(node)) return node.map((entry) => extractRichText(entry)).filter(Boolean).join(' ');
   if (typeof node !== 'object') return '';
-  if (typeof node.text === 'string') return node.text;
+  if (node.type === 'hardBreak') return '\n';
+  if (typeof node.text === 'string') {
+    const href = node.marks?.find((mark) => mark?.type === 'link')?.attrs?.href;
+    if (typeof href === 'string' && href.trim()) {
+      const label = node.text.trim() || href.trim();
+      return label === href.trim() ? `[${href.trim()}]` : `[${label}|${href.trim()}]`;
+    }
+    return node.text;
+  }
   if (Array.isArray(node.content)) {
     const separator = node.type === 'paragraph' || node.type === 'heading' ? '\n' : ' ';
     return node.content.map((entry) => extractRichText(entry)).filter(Boolean).join(separator);
@@ -213,7 +228,7 @@ function deriveDefaultLane(ticket) {
 function mergePlacements(previous, tickets) {
   const next = {};
   for (const ticket of tickets) {
-    next[ticket.key] = previous[ticket.key] || deriveDefaultLane(ticket);
+    next[ticket.key] = ticket.done ? 'archive' : (previous[ticket.key] || deriveDefaultLane(ticket));
   }
   return next;
 }
@@ -368,6 +383,90 @@ function buildDescriptionPayload(description, acceptanceCriteria) {
   return sections.join('\n\n').trim();
 }
 
+function normalizePlainUrlToken(token) {
+  const cleaned = String(token || '');
+  const trimmed = cleaned.replace(/[),.;!?]+$/g, '');
+  return {
+    href: trimmed,
+    trailing: cleaned.slice(trimmed.length),
+  };
+}
+
+function renderTextWithLinks(text, jiraBaseUrl) {
+  const source = String(text || '');
+  if (!source) return '';
+
+  const matcher = /\[([^\]|]+)\|(https?:\/\/[^\]\s]+)\]|\[(https?:\/\/[^\]\s]+)\]|(https?:\/\/[^\s<]+)|\b([A-Z][A-Z0-9]+-\d+)\b/g;
+  const parts = [];
+  let lastIndex = 0;
+  let matchIndex = 0;
+  let match;
+
+  while ((match = matcher.exec(source)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(source.slice(lastIndex, match.index));
+    }
+
+    if (match[1] && match[2]) {
+      parts.push(
+        <a
+          key={`comment-link-${matchIndex}`}
+          className="inline-link"
+          href={match[2]}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {match[1]}
+        </a>
+      );
+    } else if (match[3]) {
+      parts.push(
+        <a
+          key={`comment-link-${matchIndex}`}
+          className="inline-link"
+          href={match[3]}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {match[3]}
+        </a>
+      );
+    } else if (match[4]) {
+      const { href, trailing } = normalizePlainUrlToken(match[4]);
+      parts.push(
+        <a
+          key={`comment-link-${matchIndex}`}
+          className="inline-link"
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {href}
+        </a>
+      );
+      if (trailing) parts.push(trailing);
+    } else if (match[5]) {
+      parts.push(
+        <TicketLink
+          key={`comment-ticket-${matchIndex}`}
+          ticketKey={match[5]}
+          baseUrl={jiraBaseUrl}
+          className="inline-link"
+        />
+      );
+    }
+
+    lastIndex = match.index + match[0].length;
+    matchIndex += 1;
+  }
+
+  if (lastIndex < source.length) {
+    parts.push(source.slice(lastIndex));
+  }
+
+  return parts;
+}
+
 function TicketDetailField({ label, value, multiline = false }) {
   return (
     <div className="ticket-detail-field">
@@ -384,6 +483,37 @@ function WorkflowStat({ label, value }) {
     <div className="workflow-stat">
       <div className="workflow-stat-label">{label}</div>
       <div className="workflow-stat-value">{value}</div>
+    </div>
+  );
+}
+
+function DefinitionChecklist({ title, items }) {
+  return (
+    <div className="definition-card">
+      <div className="workflow-section-title">{title}</div>
+      <ul className="definition-list">
+        {items.map((item) => (
+          <li key={`${title}-${item}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function TeamStandardsPanel({ t }) {
+  return (
+    <div className="workflow-panel">
+      <div className="workflow-panel-header">
+        <div>
+          <div className="workflow-panel-title">{t.teamStandardsTitle}</div>
+          <div className="workflow-panel-subtitle">{t.teamStandardsSubtitle}</div>
+        </div>
+      </div>
+
+      <div className="definition-grid">
+        <DefinitionChecklist title={t.definitionOfReadyTitle} items={t.definitionOfReadyItems} />
+        <DefinitionChecklist title={t.definitionOfDoneTitle} items={t.definitionOfDoneItems} />
+      </div>
     </div>
   );
 }
@@ -520,7 +650,7 @@ function PlanningPanel({
   );
 }
 
-function DailyPanel({ t, activeSprint, remainingDays }) {
+function DailyPanel({ t, activeSprint, remainingDays, planning, dailyAdvice, onGenerateDailyAdvice, hasProject }) {
   return (
     <div className="workflow-panel">
       <div className="workflow-panel-header">
@@ -545,6 +675,29 @@ function DailyPanel({ t, activeSprint, remainingDays }) {
 
       <div className="workflow-meta-row">
         <span className="workflow-chip">{t.dailyScrumHint}</span>
+        {planning.openQuestions.trim() && <span className="workflow-chip">{t.planningOpenQuestions}: {planning.openQuestions}</span>}
+        {planning.teamAbsences.trim() && <span className="workflow-chip">{t.planningTeamAbsences}: {planning.teamAbsences}</span>}
+      </div>
+
+      <div className="workflow-checklist">
+        <div className="workflow-section-title">{t.dailyAiTitle}</div>
+        <div className="workflow-panel-subtitle">{t.dailyAiSubtitle}</div>
+        <div className="workflow-actions">
+          <button className="btn-primary" type="button" onClick={onGenerateDailyAdvice} disabled={!hasProject || dailyAdvice.loading}>
+            <Sparkles size={12} />
+            {dailyAdvice.loading ? t.loading : t.dailyAiButton}
+          </button>
+          {dailyAdvice.error && <span className="error-text">{dailyAdvice.error}</span>}
+        </div>
+
+        {dailyAdvice.result && (
+          <div className="daily-advice-grid">
+            <TicketDetailField label={t.summary} value={dailyAdvice.result.summary || t.noData} multiline />
+            <DefinitionChecklist title={t.dailyPlanChangesTitle} items={dailyAdvice.result.planChanges} />
+            <DefinitionChecklist title={t.dailyCoordinationTitle} items={dailyAdvice.result.coordination} />
+            <DefinitionChecklist title={t.dailyWatchItemsTitle} items={dailyAdvice.result.watchItems} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -604,7 +757,7 @@ function TicketDetailsModal({
           </button>
         </div>
 
-        <div className="ticket-modal-body">
+        <MiddleScrollArea className="ticket-modal-body">
           <div className="ticket-detail-grid">
             <TicketDetailField label={t.priority} value={ticket.fields.priority?.name || t.noData} />
             <TicketDetailField label={t.assignee} value={ticket.fields.assignee?.displayName || t.unassigned} />
@@ -719,12 +872,12 @@ function TicketDetailsModal({
                     <strong>{comment.author}</strong>
                     <span>{comment.created}</span>
                   </div>
-                  <div className="ticket-comment-body">{comment.body}</div>
+                  <div className="ticket-comment-body">{renderTextWithLinks(comment.body, jiraBaseUrl)}</div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
+        </MiddleScrollArea>
       </div>
     </div>
   );
@@ -862,6 +1015,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [refinementDraft, setRefinementDraft] = useState(createRefinementDraft(null));
   const [aiRefinement, setAiRefinement] = useState(DEFAULT_AI_STATE);
+  const [dailyAdvice, setDailyAdvice] = useState(DEFAULT_DAILY_ADVICE_STATE);
   const [planningMessage, setPlanningMessage] = useState('');
 
   const tickets = useMemo(
@@ -890,6 +1044,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         setPersistError('');
         setPersistReady(false);
         setSelectedTicket(null);
+        setDailyAdvice(DEFAULT_DAILY_ADVICE_STATE);
         return;
       }
 
@@ -971,6 +1126,10 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
   }, [tickets]);
 
   useEffect(() => {
+    setDailyAdvice(DEFAULT_DAILY_ADVICE_STATE);
+  }, [lang, projectKey]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function persistBoardState() {
@@ -1030,7 +1189,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
   const ticketsByLane = useMemo(() => {
     const grouped = { backlog: [], archive: [] };
     for (const ticket of filteredTickets) {
-      const lane = placements[ticket.key] || deriveDefaultLane(ticket);
+      const lane = ticket.done ? 'archive' : (placements[ticket.key] || deriveDefaultLane(ticket));
       const laneId = lane.startsWith('sprint:') && !sprints[lane.slice(7)] ? deriveDefaultLane(ticket) : lane;
       if (!grouped[laneId]) grouped[laneId] = [];
       grouped[laneId].push(ticket);
@@ -1089,8 +1248,47 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
 
   function onDropTicket(ticketKey, laneId) {
     if (!ticketKey || !laneId) return;
-    setPlacements((previous) => ({ ...previous, [ticketKey]: laneId }));
+    const ticket = tickets.find((entry) => entry.key === ticketKey);
+    const nextLane = ticket?.done ? 'archive' : laneId;
+    setPlacements((previous) => ({ ...previous, [ticketKey]: nextLane }));
     setDropTargetLane('');
+  }
+
+  async function generateDailyAdvice() {
+    if (!projectKey) return;
+    setDailyAdvice({ ...DEFAULT_DAILY_ADVICE_STATE, loading: true });
+    try {
+      const analysis = await api.analyze(projectKey, lang);
+      const planChanges = (analysis.suggestions || [])
+        .map((entry) => [entry?.key, entry?.text].filter(Boolean).join(': '))
+        .filter(Boolean);
+      const coordination = (analysis.sprintHealth?.followUps || [])
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean);
+      const watchItems = [
+        ...(analysis.sprintHealth?.blockers || []),
+        ...(analysis.sprintHealth?.deliveryRisks || []),
+      ]
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean);
+
+      setDailyAdvice({
+        loading: false,
+        error: '',
+        result: {
+          summary: analysis.summary || '',
+          planChanges: planChanges.length > 0 ? planChanges : [t.noData],
+          coordination: coordination.length > 0 ? coordination : [t.noData],
+          watchItems: watchItems.length > 0 ? watchItems : [t.noData],
+        },
+      });
+    } catch (e) {
+      setDailyAdvice({
+        loading: false,
+        error: e?.response?.data?.error || e.message || 'Failed to generate daily advice',
+        result: null,
+      });
+    }
   }
 
   function startSprint() {
@@ -1277,8 +1475,18 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
       )}
 
       {workflowMode === 'daily' && (
-        <DailyPanel t={t} activeSprint={activeSprint} remainingDays={daysRemaining(activeSprint?.endDate)} />
+        <DailyPanel
+          t={t}
+          activeSprint={activeSprint}
+          remainingDays={daysRemaining(activeSprint?.endDate)}
+          planning={planning}
+          dailyAdvice={dailyAdvice}
+          onGenerateDailyAdvice={generateDailyAdvice}
+          hasProject={Boolean(projectKey)}
+        />
       )}
+
+      <TeamStandardsPanel t={t} />
 
       <div className="sprint-summary-card">
         <div className="sprint-summary-meta">
