@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, Globe } from 'lucide-react';
-import Draggable from 'react-draggable';
 
 import { api } from './api';
 import { i18n } from './i18n';
@@ -12,50 +11,25 @@ import IdeaEvaluator from './components/IdeaEvaluator';
 import Roadmap from './components/Roadmap';
 import JiraSync from './components/JiraSync';
 
-// Simple widget wrapper using react-draggable
-function Widget({ id, title, children, defaultPos, zMap, onFocus }) {
+function Widget({ title, children, className = '' }) {
   const [expanded, setExpanded] = useState(false);
-  const nodeRef = useRef(null);
 
   return (
-    <Draggable
-      nodeRef={nodeRef}
-      handle=".wh"
-      defaultPosition={defaultPos}
-      disabled={expanded}
-      bounds="parent"
-      onStart={() => onFocus(id)}
-    >
-      <div
-        ref={nodeRef}
-        className={`widget${expanded ? ' widget--expanded' : ''}`}
-        style={{ zIndex: zMap[id] || 1 }}
-        onClick={() => onFocus(id)}
-      >
-        <div className="wh">
-          <span className="widget-title">{title}</span>
-          <button
-            className="icon-btn"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-            title={expanded ? 'Minimize' : 'Maximize'}
-          >
-            {expanded ? '⊡' : '⊞'}
-          </button>
-        </div>
-        <div className="widget-body">{children}</div>
+    <div className={`widget ${className}${expanded ? ' widget--expanded' : ''}`}>
+      <div className="wh">
+        <span className="widget-title">{title}</span>
+        <button
+          className="icon-btn"
+          onClick={() => setExpanded((v) => !v)}
+          title={expanded ? 'Minimize' : 'Maximize'}
+        >
+          {expanded ? '⊡' : '⊞'}
+        </button>
       </div>
-    </Draggable>
+      <div className="widget-body">{children}</div>
+    </div>
   );
 }
-
-const POSITIONS = {
-  tickets:  { x: 20,  y: 10 },
-  insights: { x: 440, y: 10 },
-  roadmap:  { x: 20,  y: 340 },
-  idea:     { x: 440, y: 340 },
-  jirasync: { x: 860, y: 10 },
-};
 
 export default function App() {
   const [lang, setLang] = useState('en');
@@ -67,19 +41,9 @@ export default function App() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [jiraOk, setJiraOk] = useState(false);
+  const [jiraBaseUrl, setJiraBaseUrl] = useState('');
 
   const [llm, setLlm] = useState({ online: false, models: [] });
-
-  const [zMap, setZMap] = useState({ tickets: 1, insights: 1, roadmap: 1, idea: 1, jirasync: 1 });
-  const [zTop, setZTop] = useState(2);
-
-  function focusWidget(id) {
-    setZTop((z) => {
-      const next = z + 1;
-      setZMap((m) => ({ ...m, [id]: next }));
-      return next;
-    });
-  }
 
   // Poll LLM health every 15s
   useEffect(() => {
@@ -91,9 +55,19 @@ export default function App() {
 
   // Load projects on mount
   useEffect(() => {
-    api.projects()
-      .then((p) => { setProjects(p); setJiraOk(true); })
-      .catch(() => { setJiraOk(false); });
+    Promise.allSettled([api.projects(), api.jiraHealth()]).then((results) => {
+      const [projectsRes, healthRes] = results;
+      if (projectsRes.status === 'fulfilled') {
+        setProjects(projectsRes.value);
+        setJiraOk(true);
+      } else {
+        setJiraOk(false);
+      }
+
+      if (healthRes.status === 'fulfilled') {
+        setJiraBaseUrl(healthRes.value?.baseUrl || '');
+      }
+    });
   }, []);
 
   const doRefresh = useCallback(async () => {
@@ -104,8 +78,9 @@ export default function App() {
       setLastRefresh(res.lastRefresh);
       const data = await api.issues(selectedProject);
       setIssues(data.issues || []);
+      setJiraOk(true);
     } catch {
-      /* ignore */
+      setJiraOk(false);
     } finally {
       setRefreshing(false);
     }
@@ -126,7 +101,10 @@ export default function App() {
       const data = await api.issues(key);
       setIssues(data.issues || []);
       setLastRefresh(data.lastRefresh);
-    } catch { /* ignore */ }
+      setJiraOk(true);
+    } catch {
+      setJiraOk(false);
+    }
   }
 
   return (
@@ -149,8 +127,10 @@ export default function App() {
             style={{ minWidth: 180 }}
           >
             <option value="">{t.selectProject}</option>
-            {projects.map((p) => (
-              <option key={p.key} value={p.key}>{p.key} — {p.name}</option>
+            {projects.map((p, idx) => (
+              <option key={`${p.id || 'project'}-${p.key || idx}`} value={p.key || ''}>
+                {p.key || 'UNKNOWN'} — {p.name}
+              </option>
             ))}
           </select>
 
@@ -182,24 +162,28 @@ export default function App() {
 
       <div className="canvas">
         <AnimatePresence>
-          <Widget id="tickets" title={t.tickets} defaultPos={POSITIONS.tickets} zMap={zMap} onFocus={focusWidget}>
-            <TicketList issues={issues} t={t} />
+          <Widget
+            key="widget-tickets"
+            title={t.sprintBoard}
+            className="widget--wide"
+          >
+            <TicketList issues={issues} projectKey={selectedProject} t={t} jiraBaseUrl={jiraBaseUrl} />
           </Widget>
 
-          <Widget id="insights" title={t.insights} defaultPos={POSITIONS.insights} zMap={zMap} onFocus={focusWidget}>
-            <LLMInsights projectKey={selectedProject} issueCount={issues.length} t={t} lang={lang} />
+          <Widget key="widget-insights" title={t.insights}>
+            <LLMInsights projectKey={selectedProject} issueCount={issues.length} t={t} lang={lang} jiraBaseUrl={jiraBaseUrl} />
           </Widget>
 
-          <Widget id="roadmap" title={t.roadmap} defaultPos={POSITIONS.roadmap} zMap={zMap} onFocus={focusWidget}>
-            <Roadmap t={t} />
+          <Widget key="widget-roadmap" title={t.roadmap}>
+            <Roadmap t={t} issues={issues} jiraBaseUrl={jiraBaseUrl} />
           </Widget>
 
-          <Widget id="idea" title={t.ideaEval} defaultPos={POSITIONS.idea} zMap={zMap} onFocus={focusWidget}>
+          <Widget key="widget-idea" title={t.ideaEval}>
             <IdeaEvaluator t={t} lang={lang} />
           </Widget>
 
-          <Widget id="jirasync" title={t.syncStart} defaultPos={POSITIONS.jirasync} zMap={zMap} onFocus={focusWidget}>
-            <JiraSync projectKey={selectedProject} t={t} />
+          <Widget key="widget-jirasync" title={t.syncStart}>
+            <JiraSync projectKey={selectedProject} t={t} jiraBaseUrl={jiraBaseUrl} />
           </Widget>
         </AnimatePresence>
       </div>

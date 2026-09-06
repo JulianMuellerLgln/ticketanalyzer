@@ -1,31 +1,54 @@
-import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2 } from 'lucide-react';
+import TicketLink from './TicketLink';
 
 const STATUS_COLOR = { open: '#555', 'in progress': '#888', done: '#e53e3e' };
 
-let nextId = 1;
+function normalizeStatus(raw) {
+  const v = String(raw || '').toLowerCase();
+  if (v.includes('done') || v.includes('erledigt') || v.includes('closed')) return 'done';
+  if (v.includes('progress') || v.includes('arbeit') || v.includes('doing')) return 'in progress';
+  return 'open';
+}
 
-export default function Roadmap({ t }) {
-  const [milestones, setMilestones] = useState([
-    { id: nextId++, title: 'MVP', date: '2025-Q1', status: 'done' },
-    { id: nextId++, title: 'Beta Release', date: '2025-Q2', status: 'in progress' },
-  ]);
-  const [form, setForm] = useState({ title: '', date: '', status: 'open' });
+function milestoneDate(issue) {
+  const due = issue?.fields?.duedate;
+  const updated = issue?.fields?.updated;
+  return due || (updated ? new Date(updated).toISOString().slice(0, 10) : '');
+}
 
-  function add() {
-    if (!form.title.trim()) return;
-    setMilestones((m) => [...m, { id: nextId++, ...form }]);
-    setForm({ title: '', date: '', status: 'open' });
-  }
+function milestoneReactKey(issue, idx) {
+  const key = String(issue?.key || '').trim();
+  if (key) return `ms-key-${key}`;
+  const id = String(issue?.id || '').trim();
+  if (id) return `ms-id-${id}`;
+  return `issue-${idx}`;
+}
 
-  function remove(id) {
-    setMilestones((m) => m.filter((ms) => ms.id !== id));
-  }
+export default function Roadmap({ t, issues = [], jiraBaseUrl }) {
+  const milestones = (issues || []).slice(0, 120)
+    .map((issue, idx) => ({
+      id: milestoneReactKey(issue, idx),
+      key: issue.key,
+      title: issue.fields?.summary || t.noData,
+      date: milestoneDate(issue),
+      status: normalizeStatus(issue.fields?.status?.name),
+    }))
+    .sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return a.date.localeCompare(b.date);
+    })
+    .slice(0, 40);
 
   return (
     <div className="roadmap">
       <div className="roadmap-timeline">
+        {milestones.length === 0 && (
+          <div className="muted" style={{ fontSize: 12, padding: '8px 0' }}>
+            {t.noIssues}
+          </div>
+        )}
         <AnimatePresence>
           {milestones.map((ms, idx) => (
             <motion.div
@@ -42,7 +65,13 @@ export default function Roadmap({ t }) {
               />
               <div className="milestone-line" />
               <div className="milestone-body">
-                <span className="milestone-title">{ms.title}</span>
+                <span className="milestone-title">
+                  {ms.key ? (
+                    <>
+                      <TicketLink ticketKey={ms.key} baseUrl={jiraBaseUrl} className="ticket-key-sm" /> - {ms.title}
+                    </>
+                  ) : ms.title}
+                </span>
                 {ms.date && <span className="milestone-date">{ms.date}</span>}
                 <span
                   className="milestone-status"
@@ -51,40 +80,9 @@ export default function Roadmap({ t }) {
                   {ms.status}
                 </span>
               </div>
-              <button className="icon-btn" onClick={() => remove(ms.id)}>
-                <Trash2 size={11} />
-              </button>
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
-
-      <div className="roadmap-form">
-        <input
-          className="input"
-          style={{ flex: 2 }}
-          placeholder={t.roadmapTitle}
-          value={form.title}
-          onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-        />
-        <input
-          className="input"
-          style={{ flex: 1 }}
-          placeholder={t.roadmapDate}
-          value={form.date}
-          onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-        />
-        <select
-          className="input"
-          value={form.status}
-          onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-          style={{ flex: 1 }}
-        >
-          <option value="open">{t.open}</option>
-          <option value="in progress">{t.inProgress}</option>
-          <option value="done">{t.done}</option>
-        </select>
-        <button className="btn-primary" onClick={add}>{t.add}</button>
       </div>
     </div>
   );

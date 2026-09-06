@@ -6,16 +6,16 @@ const dot = (ok) => ({
   height: 8,
   borderRadius: '50%',
   display: 'inline-block',
-  backgroundColor: ok ? '#e53e3e' : '#555',
+  backgroundColor: ok ? '#22c55e' : '#555',
   marginRight: 5,
-  boxShadow: ok ? '0 0 6px #e53e3e' : 'none',
+  boxShadow: ok ? '0 0 6px #22c55e' : 'none',
 });
 
 export default function StatusBar({ llm, jiraOk, projectCount, issueCount, lastRefresh, t }) {
   return (
     <div className="statusbar">
       <span className="statusbar-brand">
-        <Zap size={16} style={{ color: '#e53e3e', marginRight: 6 }} />
+        <Zap size={16} style={{ color: '#22c55e', marginRight: 6 }} />
         <strong>{t.appName}</strong>
         <span className="statusbar-sub">{t.subtitle}</span>
       </span>

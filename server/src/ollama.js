@@ -8,64 +8,150 @@ function getModel() {
   return process.env.OLLAMA_MODEL || 'llama3';
 }
 
+function compactErrorData(data) {
+  if (data == null) return undefined;
+  if (typeof data === 'string') return data.slice(0, 300);
+  try {
+    return JSON.stringify(data).slice(0, 300);
+  } catch {
+    return 'unserializable_error_data';
+  }
+}
+
+function buildChatError(message, reason, status, details) {
+  const err = new Error(message);
+  err.reason = reason;
+  err.status = status;
+  if (details) err.details = details;
+  return err;
+}
+
 async function checkHealth() {
   try {
-    const res = await axios.get(`${getOllamaBase()}/api/tags`, { timeout: 3000 });
+    const res = await axios.get(`${getOllamaBase()}/api/tags`, { timeout: 5000 });
     const models = (res.data.models || []).map((m) => m.name);
-    return { online: true, models };
-  } catch {
-    return { online: false, models: [] };
+    if (models.length === 0) {
+      return { online: true, models, reason: 'no_models' };
+    }
+    return { online: true, models, reason: 'ok' };
+  } catch (err) {
+    if (err.code === 'ECONNABORTED') {
+      return { online: false, models: [], reason: 'timeout', error: 'Ollama health check timed out' };
+    }
+    return { online: false, models: [], reason: 'service_unreachable', error: err.message };
   }
 }
 
 async function chat(prompt) {
-  const res = await axios.post(
-    `${getOllamaBase()}/api/generate`,
-    { model: getModel(), prompt, stream: false },
-    { timeout: 120000 }
-  );
-  return res.data.response || '';
+  const model = getModel();
+  if (!model || !model.trim()) {
+    throw buildChatError('OLLAMA_MODEL is not configured', 'missing_model', 500);
+  }
+
+  try {
+    const res = await axios.post(
+      `${getOllamaBase()}/api/generate`,
+      { model, prompt, stream: false },
+      { timeout: 120000 }
+    );
+    return res.data.response || '';
+  } catch (err) {
+    if (!err.response) {
+      if (err.code === 'ECONNABORTED') {
+        throw buildChatError('Ollama request timed out', 'timeout', 504);
+      }
+      throw buildChatError('Cannot reach Ollama service', 'service_unreachable', 502, err.message);
+    }
+
+    const details = compactErrorData(err.response.data);
+    const status = err.response.status;
+    const detailsText = typeof details === 'string' ? details.toLowerCase() : '';
+    if (status === 404 || detailsText.includes('model') && detailsText.includes('not found')) {
+      throw buildChatError(`Model not found in Ollama: ${model}`, 'model_not_found', 404, details);
+    }
+    throw buildChatError('Ollama inference failed', 'inference_failed', status, details);
+  }
 }
 
 function buildAnalysisPrompt(issues, lang = 'en') {
   const lang_intro = lang === 'de'
-    ? 'Antworte auf Deutsch. Beantworte als technischer Product Owner.'
+    ? 'Antworte strikt auf Deutsch. Beantworte als technischer Product Owner. Schreibe alle Freitext-Felder auf Deutsch.'
     : 'Reply in English. Answer as a technical Product Owner.';
 
-  const simplified = issues.slice(0, 60).map((i) => ({
-    key: i.key,
-    summary: i.fields.summary,
-    status: i.fields.status?.name,
-    priority: i.fields.priority?.name,
-    assignee: i.fields.assignee?.displayName || null,
-    created: i.fields.created,
-    updated: i.fields.updated,
-    resolved: i.fields.resolutiondate,
-    description: (i.fields.description || '').slice(0, 300),
-    storyPoints: i.fields.customfield_10016,
-    labels: i.fields.labels,
+  const simplified = issues.slice(0, 15).map((i) => ({
+    k: i.key,
+    s: (i.fields.summary || '').slice(0, 80),
+    st: i.fields.status?.name,
+    p: i.fields.priority?.name,
+    sp: i.fields.customfield_10016,
+    spx: i.fields.customfield_10020 || null,
   }));
 
   return `${lang_intro}
 
-You are analyzing ${issues.length} Jira tickets for a technical product backlog review.
-Below is a JSON excerpt of tickets:
+You are analyzing ${issues.length} Jira tickets for a sprint and backlog healthcheck after a team was away (e.g. after vacation).
+Below is a compact JSON excerpt of tickets. Field legend: k=key, s=summary, st=status, p=priority, sp=story points, spx=sprint.
 
+${JSON.stringify(simplified)}
 ${JSON.stringify(simplified, null, 2)}
 
-Provide a concise structured analysis in JSON with these keys:
-- "suggestions": array of {key, text} — new ticket ideas or improvements
-- "redundancies": array of {keys: [key1, key2], reason} — tickets that overlap
-- "gaps": array of {text} — missing information or empty important fields
-- "slowTickets": array of {key, daysOpen, note} — tickets open unusually long
-- "summary": string — 2-3 sentence executive summary
+Produce ONLY valid JSON with exactly this structure:
+{
+  "summary": "2-4 sentence executive health summary",
+  "plannedVsDone": {
+    "periodAssumption": "short text describing what was interpreted as the active sprint/period",
+    "plannedCount": number,
+    "doneCount": number,
+    "completionRate": number,
+    "atRiskCount": number,
+    "notes": "short explanation of confidence and limitations"
+  },
+  "sprintHealth": {
+    "overall": "green|yellow|red",
+    "blockers": ["..."],
+    "deliveryRisks": ["..."],
+    "followUps": ["..."]
+  },
+  "backlogRefinementCandidates": [
+    {
+      "key": "TICKET-123",
+      "reason": "why this should be refined now",
+      "missing": ["acceptance criteria", "estimate", "owner"]
+    }
+  ],
+  "suggestions": [
+    { "key": "TICKET-123", "text": "specific improvement" }
+  ],
+  "redundancies": [
+    { "keys": ["A-1", "A-2"], "reason": "overlap reason" }
+  ],
+  "gaps": [
+    { "text": "important missing information" }
+  ],
+  "slowTickets": [
+    { "key": "TICKET-123", "daysOpen": number, "note": "why slow and what to do" }
+  ]
+}
 
-Return ONLY valid JSON, no markdown fences.`;
+Rules for quality:
+- Be specific and evidence-based. Refer to concrete ticket keys whenever possible.
+- Do not invent facts. If data is missing, say so in "notes", "gaps", "blockers", or "missing".
+- Never invent ticket keys. Use only keys that exist in the provided JSON excerpt.
+- If a finding has no valid key match, set key to null and still provide the textual finding.
+- For planned vs done, infer "planned" from available signals (sprint field, fixVersion, dueDate, status timeline). If uncertain, keep confidence caveats explicit.
+- backlogRefinementCandidates must prioritize unclear tickets (vague summary/description, missing estimate, unclear owner, missing acceptance criteria, stale updates).
+- Keep every text concise and actionable.
+
+Language rule:
+- If language is German, every natural-language text field MUST be in German.
+- Keep ticket keys and numbers unchanged.
+
+Return ONLY valid JSON, no markdown fences, no extra commentary.`;
 }
 
 function buildIdeaEvalPrompt(ideaText, lang = 'en') {
   const lang_intro = lang === 'de'
-    ? 'Antworte auf Deutsch als technischer Product Owner.'
+    ? 'Antworte strikt auf Deutsch als technischer Product Owner. Schreibe alle Freitext-Felder auf Deutsch.'
     : 'Reply in English as a technical Product Owner.';
   return `${lang_intro}
 
@@ -82,6 +168,10 @@ Respond with JSON:
   "nextSteps": ["..."],
   "verdict": "brief verdict string"
 }
+
+Language rule:
+- If language is German, fields "risks", "nextSteps" and "verdict" MUST be German text.
+- Keep enum values feasibility/effort/value exactly as high|medium|low.
 
 Return ONLY valid JSON.`;
 }

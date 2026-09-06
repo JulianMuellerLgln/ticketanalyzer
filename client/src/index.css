@@ -17,24 +17,31 @@
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */
-html, body, #root {
-  height: 100%;
+html, body {
+  min-height: 100%;
+  height: auto;
   width: 100%;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
   font-size: 13px;
   line-height: 1.5;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
 }
 
 /* ── App layout ──────────────────────────────────────────────────────────── */
 .app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
+  min-height: 100vh;
+  width: 100%;
+  overflow: auto;
 }
 
 /* ── Status bar ──────────────────────────────────────────────────────────── */
@@ -109,7 +116,14 @@ html, body, #root {
 .canvas {
   flex: 1;
   position: relative;
-  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  grid-auto-rows: minmax(300px, auto);
+  align-items: start;
+  gap: 16px;
+  padding: 16px;
+  min-height: 640px;
+  overflow: auto;
   background:
     radial-gradient(ellipse at 20% 20%, rgba(229,62,62,0.03) 0%, transparent 60%),
     var(--bg);
@@ -128,8 +142,8 @@ html, body, #root {
 
 /* ── Widget ──────────────────────────────────────────────────────────────── */
 .widget {
-  position: absolute;
-  width: 400px;
+  position: relative;
+  width: 100%;
   min-height: 280px;
   background: var(--bg2);
   border: 1px solid var(--border);
@@ -138,6 +152,11 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   transition: border-color 0.15s;
+  min-width: 0;
+}
+
+.widget--wide {
+  grid-column: span 2;
 }
 
 .widget:hover {
@@ -159,13 +178,10 @@ html, body, #root {
   justify-content: space-between;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  cursor: grab;
   user-select: none;
   background: var(--bg3);
   border-radius: var(--radius) var(--radius) 0 0;
 }
-
-.wh:active { cursor: grabbing; }
 
 .widget-title {
   font-size: 11px;
@@ -205,9 +221,9 @@ html, body, #root {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: var(--accent-dim);
+  background: #233242;
   color: var(--text);
-  border: 1px solid var(--accent);
+  border: 1px solid #38516b;
   border-radius: var(--radius);
   padding: 5px 12px;
   font-size: 12px;
@@ -216,7 +232,7 @@ html, body, #root {
   transition: background 0.15s, opacity 0.15s;
 }
 
-.btn-primary:hover { background: #8b2020; }
+.btn-primary:hover { background: #2b3f54; }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn-icon {
@@ -277,10 +293,16 @@ html, body, #root {
   height: 100%;
 }
 
+.sprint-board {
+  gap: 10px;
+}
+
 .tl-search {
   display: flex;
   align-items: center;
   margin-bottom: 8px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .tl-search .input { flex: 1; }
@@ -322,11 +344,313 @@ html, body, #root {
   max-width: 220px;
 }
 
+.ticket-summary--wrap {
+  white-space: normal;
+  max-width: none;
+}
+
 .ticket-meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 2px;
+}
+
+.ticket-age {
+  margin-left: auto;
+  font-size: 10px;
+}
+
+.sprint-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.sprint-summary-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sprint-summary-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sprint-summary-line {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.sprint-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.sprint-section {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius);
+  min-height: 120px;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.sprint-section--drop-target {
+  border-color: #38516b;
+  background: rgba(56, 81, 107, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(56, 81, 107, 0.25);
+}
+
+.sprint-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sprint-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sprint-section-subtitle {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.sprint-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.sprint-empty {
+  padding: 12px;
+  font-size: 12px;
+}
+
+.ticket-table {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ticket-table-header,
+.ticket-table-row {
+  display: grid;
+  grid-template-columns: 110px minmax(280px, 1.8fr) 110px 150px 90px minmax(190px, 1.2fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.ticket-table-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: rgba(255,255,255,0.02);
+}
+
+.ticket-table-body {
+  overflow-x: auto;
+}
+
+.ticket-table-row {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ticket-table-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ticket-table-row:last-child {
+  border-bottom: 0;
+}
+
+.ticket-table-key,
+.ticket-table-summary,
+.ticket-table-priority,
+.ticket-table-status,
+.ticket-table-days,
+.ticket-table-acceptance {
+  min-width: 0;
+}
+
+.ticket-table-summary,
+.ticket-table-status,
+.ticket-table-priority {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-table-days {
+  color: var(--muted);
+}
+
+.ticket-table-acceptance {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ticket-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.ticket-modal {
+  width: min(1100px, 100%);
+  max-height: min(86vh, 900px);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.ticket-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg3);
+}
+
+.ticket-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ticket-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ticket-modal-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ticket-modal-body {
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ticket-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.ticket-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ticket-detail-label {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ticket-detail-value {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg3);
+  font-size: 12px;
+}
+
+.ticket-detail-value--multiline {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.ticket-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ticket-comment {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg3);
+}
+
+.ticket-comment-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ticket-comment-body {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 /* ── LLM Insights ────────────────────────────────────────────────────────── */
@@ -342,6 +666,13 @@ html, body, #root {
 }
 
 .analysis-results { font-size: 12px; }
+
+.analysis-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
 
 .summary-block {
   background: var(--bg3);
@@ -538,50 +869,58 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-width: 340px;
+  min-width: 360px;
 }
 
-.js-table {
+.js-head-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 240px;
+  align-items: center;
+  gap: 8px;
+}
+
+.js-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 300px;
   overflow-y: auto;
 }
 
-.js-row {
+.js-field {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.js-status-icon {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
+.js-field-wide {
+  grid-column: 1 / -1;
 }
 
-.js-summary {
-  flex: 3;
-  min-width: 0;
+.js-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.js-type {
-  flex: 1;
-  min-width: 70px;
+.js-input {
+  width: 100%;
 }
 
-.js-desc {
-  flex: 3;
-  min-width: 0;
+.js-textarea {
+  min-height: 88px;
+  resize: vertical;
 }
 
 .js-key {
-  font-size: 10px;
+  font-size: 11px;
   color: #4caf50;
   flex-shrink: 0;
   white-space: nowrap;
+  text-decoration: none;
 }
+
+.js-key:hover { text-decoration: underline; }
 
 .js-err {
   font-size: 12px;
@@ -628,4 +967,34 @@ html, body, #root {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .widget--wide {
+    grid-column: span 1;
+  }
+
+  .sprint-summary-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ticket-table-header,
+  .ticket-table-row {
+    grid-template-columns: 110px minmax(220px, 1.6fr) 110px 140px 80px 180px;
+  }
+
+  .js-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .canvas {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-modal-overlay {
+    padding: 12px;
+  }
 }

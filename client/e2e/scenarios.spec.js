@@ -38,11 +38,19 @@ test('Szenario 2: Projekt auswählen und Tickets laden', async ({ page }) => {
   await page.locator('.toolbar select.input').selectOption('AXON');
   await page.waitForTimeout(400);
 
+  await expect(page.locator('.sprint-section-title', { hasText: 'Sprint backlog' }).first()).toBeVisible();
+  await expect(page.locator('.sprint-section-title').filter({ hasText: /^Backlog$/ })).toBeVisible();
+  await expect(page.locator('.sprint-section-title', { hasText: 'Sprint 25' })).toBeVisible();
+  await expect(page.locator('.sprint-section-title').filter({ hasText: /^Archive$/ })).toBeVisible();
+
   // Alle 4 Tickets sollen sichtbar sein
-  await expect(page.getByText('Implement login flow')).toBeVisible();
-  await expect(page.getByText('Fix dashboard crash on mobile')).toBeVisible();
-  await expect(page.getByText('Add dark mode toggle')).toBeVisible();
-  await expect(page.getByText('Improve search performance')).toBeVisible();
+  await expect(page.locator('.ticket-table-row', { hasText: 'Implement login flow' })).toBeVisible();
+  await expect(page.locator('.ticket-table-row', { hasText: 'Fix dashboard crash on mobile' })).toBeVisible();
+  await expect(page.locator('.ticket-table-row', { hasText: 'Add dark mode toggle' })).toBeVisible();
+  await expect(page.locator('.ticket-table-row', { hasText: 'Improve search performance' })).toBeVisible();
+  await expect(page.getByText('5 · well defined')).toBeVisible();
+  await expect(page.getByText('1 · ok')).toBeVisible();
+  await expect(page.locator('.ticket-table-acceptance', { hasText: '0 · missing' })).toHaveCount(2);
 
   await page.screenshot({ path: 'e2e/screenshots/02b_tickets_loaded.png', fullPage: true });
 
@@ -51,8 +59,8 @@ test('Szenario 2: Projekt auswählen und Tickets laden', async ({ page }) => {
   await searchInput.fill('crash');
   await page.waitForTimeout(300);
 
-  await expect(page.getByText('Fix dashboard crash on mobile')).toBeVisible();
-  await expect(page.getByText('Implement login flow')).not.toBeVisible();
+  await expect(page.locator('.ticket-table-row', { hasText: 'Fix dashboard crash on mobile' })).toBeVisible();
+  await expect(page.locator('.ticket-table-row', { hasText: 'Implement login flow' })).toHaveCount(0);
 
   // Treffer-Zähler soll "1" zeigen
   await expect(page.locator('.tl-search .muted')).toHaveText('1');
@@ -82,6 +90,7 @@ test('Szenario 3: LLM-Analyse starten', async ({ page }) => {
 
   // Summary soll angezeigt werden
   await expect(page.getByText(/The backlog has 4 tickets/)).toBeVisible();
+  await expect(page.getByText('Confidence')).not.toBeVisible();
 
   // Suggestions-Sektion soll aufgeklappt sein
   await expect(page.getByText('Suggestions')).toBeVisible();
@@ -131,46 +140,22 @@ test('Szenario 4: Idee bewerten', async ({ page }) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Szenario 5: Roadmap – Meilenstein hinzufügen & entfernen
+// Szenario 5: Roadmap – Tickets als Timeline anzeigen
 // ─────────────────────────────────────────────────────────────────────────────
-test('Szenario 5: Roadmap Meilenstein hinzufügen', async ({ page }) => {
+test('Szenario 5: Roadmap Timeline anzeigen', async ({ page }) => {
   await setupMocks(page);
   await page.goto('/');
+  await page.locator('.toolbar select.input').selectOption('AXON');
   await page.waitForTimeout(500);
 
-  // Standard-Meilensteine sollen schon da sein
-  await expect(page.getByText('MVP')).toBeVisible();
-  await expect(page.getByText('Beta Release')).toBeVisible();
+  const roadmap = page.locator('.roadmap-timeline');
+  await expect(roadmap).toBeVisible();
+  await expect(roadmap.getByText('AXON-1 - Implement login flow')).toBeVisible();
+  await expect(roadmap.getByText('AXON-3 - Add dark mode toggle')).toBeVisible();
+  await expect(roadmap.locator('.milestone-date').first()).toBeVisible();
+  await expect(roadmap.getByText('in progress')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/05a_roadmap_initial.png', fullPage: true });
-
-  // Neuen Meilenstein hinzufügen
-  const titleInput = page.locator('.roadmap-form .input').first();
-  await titleInput.fill('GA Release');
-
-  const dateInput = page.locator('.roadmap-form .input').nth(1);
-  await dateInput.fill('2025-Q4');
-
-  const statusSelect = page.locator('.roadmap-form select');
-  await statusSelect.selectOption('in progress');
-
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await page.waitForTimeout(300);
-
-  await expect(page.getByText('GA Release')).toBeVisible();
-  await expect(page.getByText('2025-Q4')).toBeVisible();
-
-  await page.screenshot({ path: 'e2e/screenshots/05b_milestone_added.png', fullPage: true });
-
-  // MVP entfernen: ersten Trash-Button in der Roadmap-Timeline klicken
-  const trashButtons = page.locator('.roadmap-timeline .icon-btn');
-  await trashButtons.first().click();
-  await page.waitForTimeout(300);
-
-  await expect(page.getByText('MVP')).not.toBeVisible();
-  await expect(page.getByText('Beta Release')).toBeVisible();
-
-  await page.screenshot({ path: 'e2e/screenshots/05c_milestone_removed.png', fullPage: true });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -184,19 +169,16 @@ test('Szenario 6: JiraSync – Ticket synchronisieren', async ({ page }) => {
   await page.locator('.toolbar select.input').selectOption('AXON');
   await page.waitForTimeout(300);
 
-  // Ersten Ticket-Summary füllen
-  const summaryInput = page.locator('.js-summary').first();
+  await expect(page.locator('.js-form-grid')).toBeVisible();
+
+  const summaryInput = page.locator('.js-field', { hasText: 'Summary *' }).locator('input');
   await summaryInput.fill('Add OAuth2 login support');
 
-  // Typ auf "Story" setzen
-  await page.locator('.js-type').first().selectOption('Story');
+  const descriptionInput = page.locator('.js-field', { hasText: 'Description' }).locator('textarea');
+  await descriptionInput.fill('Acceptance Criteria\n- OAuth2 login succeeds\n- Existing auth flow stays stable');
 
-  // Zweiten Ticket per "+ Add" hinzufügen
-  await page.getByRole('button', { name: /\+ Add/ }).click();
-  await page.waitForTimeout(200);
-
-  const summaryInputs = page.locator('.js-summary');
-  await summaryInputs.nth(1).fill('Fix rate limiting bug');
+  const labelsInput = page.locator('.js-field', { hasText: 'Labels' }).locator('input');
+  await labelsInput.fill('auth,security');
 
   await page.screenshot({ path: 'e2e/screenshots/06a_jirasync_filled.png', fullPage: true });
 
@@ -204,10 +186,8 @@ test('Szenario 6: JiraSync – Ticket synchronisieren', async ({ page }) => {
   await page.getByRole('button', { name: 'Sync to Jira' }).click();
   await page.waitForTimeout(800);
 
-  // Tickets sollen "done" (grünes Häkchen) bekommen
-  // Prüfe, dass Jira-Keys erscheinen (AXON-100, AXON-101)
+  // Ticket soll "done" (grünes Häkchen) bekommen
   await expect(page.getByText('AXON-100')).toBeVisible();
-  await expect(page.getByText('AXON-101')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/06b_jirasync_done.png', fullPage: true });
 });
@@ -265,4 +245,78 @@ test('Szenario 8: Widget maximieren und minimieren', async ({ page }) => {
   await expect(page.locator('.widget--expanded')).not.toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/08b_widget_minimized.png', fullPage: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 9: Ticketdetails im Modal anzeigen
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 9: Ticketdetails anzeigen', async ({ page }) => {
+  await setupMocks(page);
+  await page.goto('/');
+  await page.locator('.toolbar select.input').selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  await page.locator('.ticket-table-row', { hasText: 'Implement login flow' }).click();
+
+  await expect(page.locator('.ticket-modal')).toBeVisible();
+  await expect(page.getByText('Grace Hopper')).toBeVisible();
+  await expect(page.getByText('Ada Lovelace')).toBeVisible();
+  await expect(page.getByText('Portal UI')).toBeVisible();
+  await expect(page.getByText('2026.09')).toBeVisible();
+  await expect(page.getByText('Alan Turing')).toBeVisible();
+  await expect(page.getByText('Please keep the validation errors inline')).toBeVisible();
+
+  await page.screenshot({ path: 'e2e/screenshots/09a_ticket_modal.png', fullPage: true });
+
+  await page.locator('.ticket-modal .icon-btn').click();
+  await expect(page.locator('.ticket-modal')).not.toBeVisible();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 10: Persistierte Board-Ansicht wird geladen
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 10: Persistierte Board-Ansicht laden', async ({ page }) => {
+  await setupMocks(page, {
+    boardState: {
+      showArchive: false,
+      placements: {
+        'AXON-2': 'sprint:11',
+      },
+    },
+  });
+  await page.goto('/');
+  await page.locator('.toolbar select.input').selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  const sprintBacklog = page.locator('.sprint-section').first();
+  await expect(page.locator('.sprint-section-title').filter({ hasText: /^Archive$/ })).toHaveCount(0);
+  await expect(sprintBacklog.getByText('Fix dashboard crash on mobile')).toBeVisible();
+
+  await page.screenshot({ path: 'e2e/screenshots/10a_persisted_board.png', fullPage: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 11: Drag and Drop wird über Reload persistiert
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 11: Drag and Drop Persistenz', async ({ page }) => {
+  await setupMocks(page);
+  await page.goto('/');
+  await page.locator('.toolbar select.input').selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  const ticketRow = page.locator('.ticket-table-row', { hasText: 'Fix dashboard crash on mobile' });
+  const futureSprint = page.locator('.sprint-section').filter({ hasText: 'Sprint 25' });
+
+  await ticketRow.dragTo(futureSprint);
+  await page.waitForTimeout(400);
+  await expect(futureSprint.getByText('Fix dashboard crash on mobile')).toBeVisible();
+
+  await page.reload();
+  await page.locator('.toolbar select.input').selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  const futureSprintAfterReload = page.locator('.sprint-section').filter({ hasText: 'Sprint 25' });
+  await expect(futureSprintAfterReload.getByText('Fix dashboard crash on mobile')).toBeVisible();
+
+  await page.screenshot({ path: 'e2e/screenshots/11a_dragdrop_persisted.png', fullPage: true });
 });

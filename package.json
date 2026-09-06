@@ -5,7 +5,11 @@
   "scripts": {
     "server": "cd server && npm start",
     "client": "cd client && npm run dev",
-    "dev": "concurrently \"npm run server\" \"npm run client\""
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "lint": "npm --prefix client run lint",
+    "build": "npm --prefix client run build",
+    "test:frontend": "npm --prefix client run test:e2e",
+    "test:api": "npm --prefix server test"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

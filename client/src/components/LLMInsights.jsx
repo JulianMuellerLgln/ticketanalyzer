@@ -1,7 +1,29 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronRight, AlertTriangle, Lightbulb, Clock, Layers } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertTriangle, Lightbulb, Clock, Layers, HeartPulse, ListChecks } from 'lucide-react';
 import { api } from '../api';
+import TicketLink, { linkifyTicketText } from './TicketLink';
+
+function LinkedText({ text, jiraBaseUrl }) {
+  const parts = linkifyTicketText(text, jiraBaseUrl);
+  return (
+    <>
+      {parts.map((p, idx) => {
+        if (p.type === 'ticket') {
+          return (
+            <TicketLink
+              key={`${p.value}-${idx}`}
+              ticketKey={p.value}
+              baseUrl={jiraBaseUrl}
+              className="ticket-key-sm"
+            />
+          );
+        }
+        return <span key={`txt-${idx}`}>{p.value}</span>;
+      })}
+    </>
+  );
+}
 
 function Section({ icon, label, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -29,20 +51,23 @@ function Section({ icon, label, children, defaultOpen = false }) {
   );
 }
 
-export default function LLMInsights({ projectKey, issueCount, t, lang }) {
+export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseUrl }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
 
   async function run() {
-    if (!projectKey) return;
+    if (!projectKey || issueCount <= 0) {
+      setErr(t.noIssues);
+      return;
+    }
     setLoading(true);
     setErr(null);
     try {
       const res = await api.analyze(projectKey, lang);
       setData(res);
     } catch (e) {
-      setErr(e.message);
+      setErr(e?.response?.data?.error || e.message || 'Analysis failed');
     } finally {
       setLoading(false);
     }
@@ -51,7 +76,7 @@ export default function LLMInsights({ projectKey, issueCount, t, lang }) {
   return (
     <div className="insights">
       <div className="insights-header">
-        <button className="btn-primary" onClick={run} disabled={loading || !projectKey}>
+        <button className="btn-primary" onClick={run} disabled={loading || !projectKey || issueCount <= 0}>
           {loading ? (
             <span className="spinner" />
           ) : null}
@@ -80,12 +105,60 @@ export default function LLMInsights({ projectKey, issueCount, t, lang }) {
             <div className="summary-block">{data.summary}</div>
           )}
 
+          {data.plannedVsDone && (
+              <Section icon={<HeartPulse size={12} style={{ marginRight: 4 }} />} label={t.plannedVsDone} defaultOpen>
+              <div className="analysis-item"><strong>{t.periodAssumption}:</strong> <span><LinkedText text={data.plannedVsDone.periodAssumption || t.noData} jiraBaseUrl={jiraBaseUrl} /></span></div>
+              <div className="analysis-item"><strong>{t.plannedCount}:</strong> <span>{data.plannedVsDone.plannedCount ?? '-'}</span></div>
+              <div className="analysis-item"><strong>{t.doneCount}:</strong> <span>{data.plannedVsDone.doneCount ?? '-'}</span></div>
+              <div className="analysis-item"><strong>{t.completionRate}:</strong> <span>{data.plannedVsDone.completionRate ?? '-'}%</span></div>
+              <div className="analysis-item"><strong>{t.atRiskCount}:</strong> <span>{data.plannedVsDone.atRiskCount ?? '-'}</span></div>
+              {data.plannedVsDone.notes && (
+                <div className="analysis-item"><strong>{t.notes}:</strong> <span><LinkedText text={data.plannedVsDone.notes} jiraBaseUrl={jiraBaseUrl} /></span></div>
+              )}
+            </Section>
+          )}
+
+          {data.sprintHealth && (
+            <Section icon={<HeartPulse size={12} style={{ marginRight: 4, color: '#e53e3e' }} />} label={t.sprintHealth} defaultOpen>
+              <div className="analysis-item"><strong>{t.overall}:</strong> <span>{data.sprintHealth.overall || '-'}</span></div>
+              {(data.sprintHealth.blockers || []).map((b, i) => (
+                <div key={`blocker-${i}-${(b || '').slice(0, 24)}`} className="analysis-item">
+                  <strong>{t.blockers}:</strong> <span><LinkedText text={b} jiraBaseUrl={jiraBaseUrl} /></span>
+                </div>
+              ))}
+              {(data.sprintHealth.deliveryRisks || []).map((r, i) => (
+                <div key={`risk-${i}-${(r || '').slice(0, 24)}`} className="analysis-item">
+                  <strong>{t.deliveryRisks}:</strong> <span><LinkedText text={r} jiraBaseUrl={jiraBaseUrl} /></span>
+                </div>
+              ))}
+              {(data.sprintHealth.followUps || []).map((f, i) => (
+                <div key={`followup-${i}-${(f || '').slice(0, 24)}`} className="analysis-item">
+                  <strong>{t.followUps}:</strong> <span><LinkedText text={f} jiraBaseUrl={jiraBaseUrl} /></span>
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {data.backlogRefinementCandidates?.length > 0 && (
+            <Section icon={<ListChecks size={12} style={{ marginRight: 4 }} />} label={t.backlogRefinement}>
+              {data.backlogRefinementCandidates.map((c, i) => (
+                <div key={`${c?.key || 'refine'}-${i}`} className="analysis-item">
+                  {c?.key && <TicketLink ticketKey={c.key} baseUrl={jiraBaseUrl} className="ticket-key-sm" />}
+                  <span><LinkedText text={c?.reason || t.noData} jiraBaseUrl={jiraBaseUrl} /></span>
+                  {Array.isArray(c?.missing) && c.missing.length > 0 && (
+                    <span className="muted">({c.missing.join(', ')})</span>
+                  )}
+                </div>
+              ))}
+            </Section>
+          )}
+
           {data.suggestions?.length > 0 && (
             <Section icon={<Lightbulb size={12} style={{ marginRight: 4, color: '#e53e3e' }} />} label={t.suggestions} defaultOpen>
               {data.suggestions.map((s, i) => (
-                <div key={i} className="analysis-item">
-                  {s.key && <span className="ticket-key-sm">{s.key}</span>}
-                  <span>{s.text}</span>
+                <div key={`${s?.key || 'suggestion'}-${i}-${(s?.text || '').slice(0, 24)}`} className="analysis-item">
+                  {s.key && <TicketLink ticketKey={s.key} baseUrl={jiraBaseUrl} className="ticket-key-sm" />}
+                  <span><LinkedText text={s.text} jiraBaseUrl={jiraBaseUrl} /></span>
                 </div>
               ))}
             </Section>
@@ -94,9 +167,16 @@ export default function LLMInsights({ projectKey, issueCount, t, lang }) {
           {data.redundancies?.length > 0 && (
             <Section icon={<Layers size={12} style={{ marginRight: 4 }} />} label={t.redundancies}>
               {data.redundancies.map((r, i) => (
-                <div key={i} className="analysis-item">
-                  <span className="ticket-key-sm">{r.keys?.join(' + ')}</span>
-                  <span>{r.reason}</span>
+                <div key={`${(r?.keys || []).join('+') || 'redundancy'}-${i}`} className="analysis-item">
+                  <span>
+                    {(r.keys || []).map((k, kIdx) => (
+                      <span key={`${k}-${kIdx}`}>
+                        {kIdx > 0 ? ' + ' : ''}
+                        <TicketLink ticketKey={k} baseUrl={jiraBaseUrl} className="ticket-key-sm" />
+                      </span>
+                    ))}
+                  </span>
+                  <span><LinkedText text={r.reason} jiraBaseUrl={jiraBaseUrl} /></span>
                 </div>
               ))}
             </Section>
@@ -105,7 +185,9 @@ export default function LLMInsights({ projectKey, issueCount, t, lang }) {
           {data.gaps?.length > 0 && (
             <Section icon={<AlertTriangle size={12} style={{ marginRight: 4, color: '#e53e3e' }} />} label={t.gaps}>
               {data.gaps.map((g, i) => (
-                <div key={i} className="analysis-item">{g.text || g}</div>
+                <div key={`${(g?.text || g || 'gap').toString().slice(0, 24)}-${i}`} className="analysis-item">
+                  <LinkedText text={g.text || g} jiraBaseUrl={jiraBaseUrl} />
+                </div>
               ))}
             </Section>
           )}
@@ -113,10 +195,10 @@ export default function LLMInsights({ projectKey, issueCount, t, lang }) {
           {data.slowTickets?.length > 0 && (
             <Section icon={<Clock size={12} style={{ marginRight: 4 }} />} label={t.slowTickets}>
               {data.slowTickets.map((s, i) => (
-                <div key={i} className="analysis-item">
-                  <span className="ticket-key-sm">{s.key}</span>
+                <div key={`${s?.key || 'slow'}-${i}`} className="analysis-item">
+                  <TicketLink ticketKey={s.key} baseUrl={jiraBaseUrl} className="ticket-key-sm" />
                   <span className="muted">{s.daysOpen}d</span>
-                  <span>{s.note}</span>
+                  <span><LinkedText text={s.note} jiraBaseUrl={jiraBaseUrl} /></span>
                 </div>
               ))}
             </Section>

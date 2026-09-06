@@ -23,8 +23,31 @@ Opens on http://localhost:5173 — backend on :3001.
 ## Ollama
 
 ```bash
-ollama pull llama3
+ollama pull qwen2:7b
 ollama serve
 ```
 
 The LLM status indicator in the header shows online/offline in real time.
+
+## Health checks
+
+```bash
+curl http://localhost:3001/api/jira/health
+curl http://localhost:3001/api/llm/health
+```
+
+If Jira health reports auth errors, verify auth mode in server/.env:
+- JIRA_AUTH_TYPE=basic with JIRA_USER_EMAIL + JIRA_API_TOKEN
+- JIRA_AUTH_TYPE=bearer with JIRA_API_TOKEN (JIRA_USER_EMAIL optional)
+
+## Validation
+
+```bash
+npm run lint
+npm run build
+npm run test:api
+npm run test:frontend
+```
+
+- `test:api` runs the server API regression tests with Node's built-in test runner.
+- `test:frontend` runs the Playwright browser tests for the sprint board and dashboard flows.
