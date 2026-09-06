@@ -151,10 +151,12 @@ test('Szenario 5: Roadmap Timeline anzeigen', async ({ page }) => {
 
   const roadmap = page.locator('.roadmap-timeline');
   await expect(roadmap).toBeVisible();
-  await expect(roadmap.getByText('AXON-1 - Implement login flow')).toBeVisible();
-  await expect(roadmap.getByText('AXON-3 - Add dark mode toggle')).toBeVisible();
+  await expect(page.getByText('Delivered outcomes and shipped items instead of open backlog work.')).toBeVisible();
+  await expect(roadmap.getByText('AXON-4 - Improve search performance')).toBeVisible();
+  await expect(roadmap.getByText('Delivered')).toBeVisible();
+  await expect(roadmap.getByText('2 Points')).toBeVisible();
   await expect(roadmap.locator('.milestone-date').first()).toBeVisible();
-  await expect(roadmap.getByText('in progress')).toBeVisible();
+  await expect(roadmap.getByText('done')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/05a_roadmap_initial.png', fullPage: true });
 });
@@ -202,7 +204,7 @@ test('Szenario 7: Sprache umschalten (EN → DE)', async ({ page }) => {
   await page.waitForTimeout(400);
 
   // Englische Texte sollen sichtbar sein
-  await expect(page.getByText('Technical Backlog Intelligence')).toBeVisible();
+  await expect(page.getByText('Geo IT delivery cockpit for agile Jira teams')).toBeVisible();
   // "Select project…" ist ein <option> inside der select – prüfe den select-Value
   await expect(page.locator('.toolbar select.input')).toHaveValue('');
 
@@ -213,7 +215,7 @@ test('Szenario 7: Sprache umschalten (EN → DE)', async ({ page }) => {
   await page.waitForTimeout(300);
 
   // Deutsche Texte sollen erscheinen
-  await expect(page.getByText('Technische Backlog-Intelligenz')).toBeVisible();
+  await expect(page.getByText('Geo-IT-Liefercockpit fuer agile Jira-Teams')).toBeVisible();
   await expect(page.locator('.toolbar select.input')).toHaveValue('');
   await expect(page.getByText('KI-Analyse')).toBeVisible();
   await expect(page.getByText('Ideen-Bewertung')).toBeVisible();
@@ -268,7 +270,13 @@ test('Szenario 9: Ticketdetails anzeigen', async ({ page }) => {
   await expect(modal.getByText('Alan Turing')).toBeVisible();
   await expect(modal.getByText('Please keep the validation errors inline')).toBeVisible();
   await expect(modal.getByText('MOD-1 · Modernize login and onboarding flow')).toBeVisible();
+  await expect(modal.locator('.ticket-detail-field', { hasText: 'Points' }).getByText('5')).toBeVisible();
+  await expect(modal.getByText('Ticket check tool')).toBeVisible();
+  await expect(modal.getByText('Ready progress: 5/6')).toBeVisible();
   await expect(modal.getByRole('link', { name: 'Runbook' })).toHaveAttribute('href', 'https://example.com/runbook');
+
+  await modal.getByLabel('Open dependencies or questions are transparent.').check();
+  await expect(modal.getByText('Ready progress: 6/6')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/09a_ticket_modal.png', fullPage: true });
 
@@ -291,6 +299,7 @@ test('Szenario 12: Arbeitsmodi und Scrum Guide', async ({ page }) => {
   await expect(page.getByText('Definition of Ready / Done')).toBeVisible();
   await expect(page.getByText('Definition of Ready', { exact: true })).toBeVisible();
   await expect(page.getByText('Definition of Done', { exact: true })).toBeVisible();
+  await expect(page.getByText('Typical team load', { exact: true })).toBeVisible();
 
   const goalDraft = page.locator('.workflow-textarea').first();
   await goalDraft.fill('Reduce onboarding support load through stable login flows');
@@ -351,6 +360,25 @@ test('Szenario 10: Persistierte Board-Ansicht laden', async ({ page }) => {
         'AXON-2': 'sprint:11',
         'AXON-4': 'backlog',
       },
+      checklists: {
+        'AXON-2': {
+          ready: {
+            titleDescription: false,
+            acceptance: true,
+            objective: true,
+            component: false,
+            estimate: false,
+            dependencies: false,
+          },
+          done: {
+            tests: true,
+            docs: false,
+            openPoints: false,
+            acceptanceVerified: false,
+            merged: false,
+          },
+        },
+      },
     },
   });
   await page.goto('/');
@@ -361,6 +389,8 @@ test('Szenario 10: Persistierte Board-Ansicht laden', async ({ page }) => {
   await expect(page.locator('.sprint-section-title').filter({ hasText: /^Archive$/ })).toHaveCount(0);
   await expect(sprintBacklog.getByText('Fix dashboard crash on mobile')).toBeVisible();
   await expect(page.locator('.ticket-table-row', { hasText: 'Improve search performance' })).toHaveCount(0);
+  await expect(sprintBacklog.getByText('2/6')).toBeVisible();
+  await expect(sprintBacklog.getByText('1/5')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/10a_persisted_board.png', fullPage: true });
 });

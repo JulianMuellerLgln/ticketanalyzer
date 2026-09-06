@@ -39,6 +39,10 @@ const DEFAULT_DAILY_ADVICE_STATE = {
   result: null,
 };
 
+const READY_CHECK_KEYS = ['titleDescription', 'acceptance', 'objective', 'component', 'estimate', 'dependencies'];
+const DONE_CHECK_KEYS = ['tests', 'docs', 'openPoints', 'acceptanceVerified', 'merged'];
+const DEFAULT_CHECKLISTS_STATE = {};
+
 const STOP_WORDS = new Set([
   'the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'oder', 'und', 'der', 'die', 'das',
   'ein', 'eine', 'mit', 'auf', 'von', 'ist', 'are', 'you', 'your', 'after', 'before', 'when',
@@ -225,6 +229,17 @@ function deriveDefaultLane(ticket) {
   return 'backlog';
 }
 
+function groupTicketsByLane(tickets, placements, sprints) {
+  const grouped = { backlog: [], archive: [] };
+  for (const ticket of tickets) {
+    const lane = ticket.done ? 'archive' : (placements[ticket.key] || deriveDefaultLane(ticket));
+    const laneId = lane.startsWith('sprint:') && !sprints[lane.slice(7)] ? deriveDefaultLane(ticket) : lane;
+    if (!grouped[laneId]) grouped[laneId] = [];
+    grouped[laneId].push(ticket);
+  }
+  return grouped;
+}
+
 function mergePlacements(previous, tickets) {
   const next = {};
   for (const ticket of tickets) {
@@ -272,6 +287,57 @@ function formatList(values) {
 
 function primaryComponentName(ticket) {
   return String(ticket?.fields?.components?.[0]?.name || '').trim();
+}
+
+function storyPoints(ticket) {
+  const value = Number(ticket?.fields?.customfield_10016);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function hasDependenciesHint(ticket) {
+  const text = issueText(ticket);
+  return /\b(blocked by|depends on|dependency|risk|question|open question|abhaeng|abhängig|offen)\b/i.test(text);
+}
+
+function getDefaultChecklistState(ticket, objectiveMatch) {
+  return {
+    ready: {
+      titleDescription: Boolean(String(ticket?.fields?.summary || '').trim() && extractRichText(ticket?.fields?.description).trim()),
+      acceptance: ticket.acceptanceScore >= 1,
+      objective: Boolean(objectiveMatch),
+      component: Boolean(primaryComponentName(ticket)),
+      estimate: storyPoints(ticket) > 0,
+      dependencies: hasDependenciesHint(ticket),
+    },
+    done: {
+      tests: false,
+      docs: false,
+      openPoints: false,
+      acceptanceVerified: false,
+      merged: ticket.done,
+    },
+  };
+}
+
+function checklistProgressMap(ticket, storedState, objectiveMatch) {
+  const defaults = getDefaultChecklistState(ticket, objectiveMatch);
+  const resolveSection = (keys, sectionName) => {
+    const section = storedState?.[sectionName] || {};
+    const completed = keys.reduce(
+      (sum, key) => sum + ((key in section ? section[key] : defaults[sectionName][key]) ? 1 : 0),
+      0
+    );
+    return { completed, total: keys.length };
+  };
+
+  return {
+    ready: resolveSection(READY_CHECK_KEYS, 'ready'),
+    done: resolveSection(DONE_CHECK_KEYS, 'done'),
+  };
+}
+
+function progressLabel(progress) {
+  return `${progress.completed}/${progress.total}`;
 }
 
 function tokenize(value) {
@@ -500,6 +566,29 @@ function DefinitionChecklist({ title, items }) {
   );
 }
 
+function ChecklistEditor({ title, items, progressLabelText, sectionKey, values, onToggle }) {
+  return (
+    <div className="definition-card">
+      <div className="definition-card-header">
+        <div className="workflow-section-title">{title}</div>
+        <span className="workflow-chip">{progressLabelText}</span>
+      </div>
+      <div className="checklist-grid">
+        {items.map(([itemKey, label]) => (
+          <label key={`${sectionKey}-${itemKey}`} className="checklist-item">
+            <input
+              type="checkbox"
+              checked={Boolean(values[itemKey])}
+              onChange={(event) => onToggle(sectionKey, itemKey, event.target.checked)}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TeamStandardsPanel({ t }) {
   return (
     <div className="workflow-panel">
@@ -513,6 +602,49 @@ function TeamStandardsPanel({ t }) {
       <div className="definition-grid">
         <DefinitionChecklist title={t.definitionOfReadyTitle} items={t.definitionOfReadyItems} />
         <DefinitionChecklist title={t.definitionOfDoneTitle} items={t.definitionOfDoneItems} />
+      </div>
+    </div>
+  );
+}
+
+function TicketChecklistTool({ ticket, t, checklistState, objectiveMatch, onToggle }) {
+  const defaultState = getDefaultChecklistState(ticket, objectiveMatch);
+  const effectiveReady = Object.fromEntries(
+    READY_CHECK_KEYS.map((key) => [key, key in (checklistState?.ready || {}) ? checklistState.ready[key] : defaultState.ready[key]])
+  );
+  const effectiveDone = Object.fromEntries(
+    DONE_CHECK_KEYS.map((key) => [key, key in (checklistState?.done || {}) ? checklistState.done[key] : defaultState.done[key]])
+  );
+  const progress = checklistProgressMap(ticket, checklistState, objectiveMatch);
+  const readyItems = READY_CHECK_KEYS.map((key) => [key, t.readyChecklistItems[key]]);
+  const doneItems = DONE_CHECK_KEYS.map((key) => [key, t.doneChecklistItems[key]]);
+
+  return (
+    <div className="workflow-panel">
+      <div className="workflow-panel-header">
+        <div>
+          <div className="workflow-panel-title">{t.checklistToolTitle}</div>
+          <div className="workflow-panel-subtitle">{t.checklistToolSubtitle}</div>
+        </div>
+      </div>
+
+      <div className="definition-grid">
+        <ChecklistEditor
+          title={t.definitionOfReadyTitle}
+          items={readyItems}
+          progressLabelText={`${t.checklistReadyProgress}: ${progressLabel(progress.ready)}`}
+          sectionKey="ready"
+          values={effectiveReady}
+          onToggle={onToggle}
+        />
+        <ChecklistEditor
+          title={t.definitionOfDoneTitle}
+          items={doneItems}
+          progressLabelText={`${t.checklistDoneProgress}: ${progressLabel(progress.done)}`}
+          sectionKey="done"
+          values={effectiveDone}
+          onToggle={onToggle}
+        />
       </div>
     </div>
   );
@@ -592,6 +724,9 @@ function PlanningPanel({
   onSaveSprintGoal,
   planningMessage,
   planningTargetSprint,
+  baselineLoad,
+  backlogPoints,
+  targetSprintPoints,
 }) {
   return (
     <div className="workflow-panel">
@@ -599,6 +734,11 @@ function PlanningPanel({
         <div>
           <div className="workflow-panel-title">{t.planningTitle}</div>
           <div className="workflow-panel-subtitle">{t.planningSubtitle}</div>
+        </div>
+        <div className="workflow-stat-grid">
+          <WorkflowStat label={t.teamBaselineLoad} value={baselineLoad} />
+          <WorkflowStat label={t.backlogLoad} value={backlogPoints} />
+          <WorkflowStat label={t.sprintLoad} value={targetSprintPoints} />
         </div>
       </div>
 
@@ -650,7 +790,18 @@ function PlanningPanel({
   );
 }
 
-function DailyPanel({ t, activeSprint, remainingDays, planning, dailyAdvice, onGenerateDailyAdvice, hasProject }) {
+function DailyPanel({
+  t,
+  activeSprint,
+  remainingDays,
+  planning,
+  dailyAdvice,
+  onGenerateDailyAdvice,
+  hasProject,
+  baselineLoad,
+  activeSprintPoints,
+  backlogPoints,
+}) {
   return (
     <div className="workflow-panel">
       <div className="workflow-panel-header">
@@ -661,6 +812,9 @@ function DailyPanel({ t, activeSprint, remainingDays, planning, dailyAdvice, onG
         <div className="workflow-stat-grid">
           <WorkflowStat label={t.sprintBacklog} value={activeSprint?.name || t.noActiveSprint} />
           <WorkflowStat label={t.remainingSprintDays} value={remainingDays == null ? t.noData : remainingDays} />
+          <WorkflowStat label={t.teamBaselineLoad} value={baselineLoad} />
+          <WorkflowStat label={t.sprintLoad} value={activeSprintPoints} />
+          <WorkflowStat label={t.backlogLoad} value={backlogPoints} />
         </div>
       </div>
 
@@ -716,6 +870,8 @@ function TicketDetailsModal({
   onGenerateRefinement,
   onApplyRefinement,
   aiRefinement,
+  checklistState,
+  onToggleChecklist,
   onClose,
 }) {
   if (!ticket) return null;
@@ -766,6 +922,7 @@ function TicketDetailsModal({
             <TicketDetailField label={t.updatedAt} value={formatDateLabel(ticket.fields.updated)} />
             <TicketDetailField label={t.dueDate} value={formatDateLabel(ticket.fields.duedate)} />
             <TicketDetailField label={t.daysOpen} value={String(ticket.daysOpen)} />
+            <TicketDetailField label={t.points} value={String(storyPoints(ticket))} />
             <TicketDetailField label={t.acceptanceCriteria} value={acceptanceMeta.text} />
             <TicketDetailField label={t.sprints} value={sprintNames || t.noData} />
             <TicketDetailField label={t.labels} value={labels || t.noData} />
@@ -781,6 +938,14 @@ function TicketDetailsModal({
             multiline
           />
           <TicketDetailField label={t.description} value={descriptionText || t.noData} multiline />
+
+          <TicketChecklistTool
+            ticket={ticket}
+            t={t}
+            checklistState={checklistState}
+            objectiveMatch={objectiveMatch}
+            onToggle={onToggleChecklist}
+          />
 
           {workflowMode === 'refinement' && (
             <div className="refinement-editor">
@@ -887,6 +1052,7 @@ function Section({
   title,
   subtitle,
   count,
+  points,
   laneId,
   tickets,
   t,
@@ -897,6 +1063,7 @@ function Section({
   onOpenTicket,
   dropTargetLane,
   objectiveMatches,
+  checklistStates,
   allowDrop = true,
 }) {
   return (
@@ -923,7 +1090,10 @@ function Section({
           <div className="sprint-section-title">{title}</div>
           {subtitle && <div className="sprint-section-subtitle">{subtitle}</div>}
         </div>
-        <span className="sprint-section-count">{count}</span>
+        <div className="sprint-section-metrics">
+          <span className="sprint-section-count">{count}</span>
+          <span className="workflow-chip">{points} {t.points}</span>
+        </div>
       </div>
 
       <div className="ticket-table">
@@ -932,9 +1102,11 @@ function Section({
           <span>{t.summary}</span>
           <span>{t.productOrComponent}</span>
           <span>{t.objective}</span>
+          <span>{t.points}</span>
           <span>{t.priority}</span>
           <span>{t.status}</span>
-          <span>{t.daysOpen}</span>
+          <span>{t.readyCheck}</span>
+          <span>{t.doneCheck}</span>
           <span>{t.acceptanceCriteria}</span>
         </div>
 
@@ -947,6 +1119,7 @@ function Section({
               const acceptanceMeta = getAcceptanceMeta(ticket.acceptanceScore, t);
               const acceptanceTone = ACCEPTANCE_LEVELS[ticket.acceptanceScore] || ACCEPTANCE_LEVELS[0];
               const objectiveMatch = objectiveMatches[ticket.key] || null;
+              const checklistProgress = checklistProgressMap(ticket, checklistStates[ticket.key], objectiveMatch);
               const productName = primaryComponentName(ticket);
               return (
                 <motion.button
@@ -975,11 +1148,13 @@ function Section({
                   >
                     {objectiveMatch ? objectiveMatch.objectiveKey : t.noObjectiveMatch}
                   </span>
+                  <span className="ticket-table-points">{storyPoints(ticket)}</span>
                   <span className="ticket-table-priority" style={{ color: PRIORITY_TONE[ticket.fields.priority?.name] || '#aaa' }}>
                     {ticket.fields.priority?.name || '—'}
                   </span>
                   <span className="ticket-table-status">{ticket.fields.status?.name || '—'}</span>
-                  <span className="ticket-table-days">{ticket.daysOpen}</span>
+                  <span className="ticket-table-progress">{progressLabel(checklistProgress.ready)}</span>
+                  <span className="ticket-table-progress">{progressLabel(checklistProgress.done)}</span>
                   <span
                     className="ticket-table-acceptance"
                     style={{
@@ -1006,6 +1181,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
   const [sprints, setSprints] = useState({});
   const [placements, setPlacements] = useState({});
   const [planning, setPlanning] = useState(DEFAULT_PLANNING_STATE);
+  const [checklists, setChecklists] = useState(DEFAULT_CHECKLISTS_STATE);
   const [availableComponents, setAvailableComponents] = useState([]);
   const [objectiveContext, setObjectiveContext] = useState({ board: null, issues: [] });
   const [dropTargetLane, setDropTargetLane] = useState('');
@@ -1041,6 +1217,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         setSprints({});
         setPlacements({});
         setPlanning(DEFAULT_PLANNING_STATE);
+        setChecklists(DEFAULT_CHECKLISTS_STATE);
         setPersistError('');
         setPersistReady(false);
         setSelectedTicket(null);
@@ -1056,6 +1233,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         setSprints(state.sprints || {});
         setPlacements(state.placements || {});
         setPlanning({ ...DEFAULT_PLANNING_STATE, ...(state.planning || {}) });
+        setChecklists(state.checklists || DEFAULT_CHECKLISTS_STATE);
         setPersistError('');
       } catch (e) {
         if (cancelled) return;
@@ -1063,6 +1241,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         setSprints({});
         setPlacements({});
         setPlanning(DEFAULT_PLANNING_STATE);
+        setChecklists(DEFAULT_CHECKLISTS_STATE);
         setPersistError(e?.response?.data?.error || e.message || 'Failed to load board state');
       } finally {
         if (!cancelled) setPersistReady(true);
@@ -1135,7 +1314,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     async function persistBoardState() {
       if (!projectKey || !persistReady) return;
       try {
-        await api.saveBoardState(projectKey, { placements, sprints, showArchive, planning });
+        await api.saveBoardState(projectKey, { placements, sprints, showArchive, planning, checklists });
         if (!cancelled) setPersistError('');
       } catch (e) {
         if (!cancelled) {
@@ -1148,7 +1327,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     return () => {
       cancelled = true;
     };
-  }, [placements, persistReady, planning, projectKey, showArchive, sprints]);
+  }, [checklists, placements, persistReady, planning, projectKey, showArchive, sprints]);
 
   const sprintList = useMemo(
     () => Object.values(sprints).sort((a, b) => sprintSortValue(a).localeCompare(sprintSortValue(b))),
@@ -1186,16 +1365,16 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     return out;
   }, [objectiveContext.issues, tickets]);
 
-  const ticketsByLane = useMemo(() => {
-    const grouped = { backlog: [], archive: [] };
-    for (const ticket of filteredTickets) {
-      const lane = ticket.done ? 'archive' : (placements[ticket.key] || deriveDefaultLane(ticket));
-      const laneId = lane.startsWith('sprint:') && !sprints[lane.slice(7)] ? deriveDefaultLane(ticket) : lane;
-      if (!grouped[laneId]) grouped[laneId] = [];
-      grouped[laneId].push(ticket);
+  const allTicketsByLane = useMemo(() => groupTicketsByLane(tickets, placements, sprints), [tickets, placements, sprints]);
+  const ticketsByLane = useMemo(() => groupTicketsByLane(filteredTickets, placements, sprints), [filteredTickets, placements, sprints]);
+
+  const lanePoints = useMemo(() => {
+    const sums = {};
+    for (const [laneId, laneTickets] of Object.entries(allTicketsByLane)) {
+      sums[laneId] = laneTickets.reduce((sum, ticket) => sum + storyPoints(ticket), 0);
     }
-    return grouped;
-  }, [filteredTickets, placements, sprints]);
+    return sums;
+  }, [allTicketsByLane]);
 
   const visibleTicketCount = useMemo(() => {
     let count = (ticketsByLane.backlog || []).length;
@@ -1220,6 +1399,29 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         .sort((a, b) => b.gaps.length - a.gaps.length || b.ticket.daysOpen - a.ticket.daysOpen),
     [objectiveMatches, tickets]
   );
+
+  const sprintPointStats = useMemo(() => {
+    const totals = {};
+    for (const ticket of tickets) {
+      const points = storyPoints(ticket);
+      for (const sprint of ticket.sprints) {
+        if (!totals[sprint.id]) {
+          totals[sprint.id] = { sprint, points: 0, donePoints: 0 };
+        }
+        totals[sprint.id].points += points;
+        if (ticket.done) totals[sprint.id].donePoints += points;
+      }
+    }
+
+    const historical = Object.values(totals).filter((entry) => entry.points > 0);
+    const closed = historical.filter((entry) => entry.sprint.state === 'closed');
+    const source = closed.length > 0 ? closed : historical;
+    const averageLoad = source.length > 0
+      ? Math.round((source.reduce((sum, entry) => sum + (closed.length > 0 ? entry.donePoints : entry.points), 0) / source.length) * 10) / 10
+      : 0;
+
+    return { bySprintId: totals, averageLoad };
+  }, [tickets]);
 
   const currentSprintSubtitle = activeSprint
     ? [
@@ -1252,6 +1454,20 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     const nextLane = ticket?.done ? 'archive' : laneId;
     setPlacements((previous) => ({ ...previous, [ticketKey]: nextLane }));
     setDropTargetLane('');
+  }
+
+  function toggleChecklist(sectionKey, itemKey, checked) {
+    if (!selectedTicket?.key) return;
+    setChecklists((previous) => ({
+      ...previous,
+      [selectedTicket.key]: {
+        ...(previous[selectedTicket.key] || {}),
+        [sectionKey]: {
+          ...(previous[selectedTicket.key]?.[sectionKey] || {}),
+          [itemKey]: checked,
+        },
+      },
+    }));
   }
 
   async function generateDailyAdvice() {
@@ -1367,6 +1583,11 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     setPlanningMessage(t.saved);
   }
 
+  const baselineLoad = `${sprintPointStats.averageLoad || 0} ${t.points}`;
+  const backlogPoints = `${lanePoints.backlog || 0} ${t.points}`;
+  const activeSprintPoints = `${activeSprint ? lanePoints[`sprint:${activeSprint.id}`] || 0 : 0} ${t.points}`;
+  const planningTargetSprintPoints = `${planningTargetSprint ? lanePoints[`sprint:${planningTargetSprint.id}`] || 0 : 0} ${t.points}`;
+
   function onRefinementDraftChange(field, value) {
     setRefinementDraft((previous) => ({ ...previous, [field]: value }));
     setAiRefinement((previous) => ({ ...previous, error: '', savedMessage: '' }));
@@ -1471,6 +1692,9 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
           onSaveSprintGoal={saveSprintGoal}
           planningMessage={planningMessage}
           planningTargetSprint={planningTargetSprint}
+          baselineLoad={baselineLoad}
+          backlogPoints={backlogPoints}
+          targetSprintPoints={planningTargetSprintPoints}
         />
       )}
 
@@ -1483,6 +1707,9 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
           dailyAdvice={dailyAdvice}
           onGenerateDailyAdvice={generateDailyAdvice}
           hasProject={Boolean(projectKey)}
+          baselineLoad={baselineLoad}
+          activeSprintPoints={activeSprintPoints}
+          backlogPoints={backlogPoints}
         />
       )}
 
@@ -1492,6 +1719,11 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         <div className="sprint-summary-meta">
           <div className="sprint-summary-title">{activeSprint ? activeSprint.name : t.noActiveSprint}</div>
           <div className="sprint-summary-line">{currentSprintSubtitle}</div>
+          <div className="workflow-meta-row">
+            <span className="workflow-chip">{t.teamBaselineLoad}: {baselineLoad}</span>
+            <span className="workflow-chip">{t.backlogLoad}: {backlogPoints}</span>
+            <span className="workflow-chip">{t.sprintLoad}: {activeSprintPoints}</span>
+          </div>
         </div>
         <button className="btn-primary" onClick={activeSprint ? endSprint : startSprint}>
           {activeSprint ? t.endSprint : t.startSprint}
@@ -1503,6 +1735,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
           title={activeSprint ? `${t.sprintBacklog}: ${activeSprint.name}` : t.sprintBacklog}
           subtitle={activeSprint ? currentSprintSubtitle : t.startSprintHint}
           count={activeSprint ? (ticketsByLane[`sprint:${activeSprint.id}`] || []).length : 0}
+          points={activeSprint ? lanePoints[`sprint:${activeSprint.id}`] || 0 : 0}
           laneId={activeSprint ? `sprint:${activeSprint.id}` : ''}
           tickets={activeSprint ? ticketsByLane[`sprint:${activeSprint.id}`] || [] : []}
           t={t}
@@ -1513,6 +1746,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
           onOpenTicket={openTicket}
           dropTargetLane={dropTargetLane}
           objectiveMatches={objectiveMatches}
+          checklistStates={checklists}
           allowDrop={Boolean(activeSprint)}
         />
 
@@ -1520,6 +1754,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
           title={t.backlog}
           subtitle={workflowMode === 'planning' ? t.planningSubtitle : t.backlogHint}
           count={(ticketsByLane.backlog || []).length}
+          points={lanePoints.backlog || 0}
           laneId="backlog"
           tickets={ticketsByLane.backlog || []}
           t={t}
@@ -1530,6 +1765,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
           onOpenTicket={openTicket}
           dropTargetLane={dropTargetLane}
           objectiveMatches={objectiveMatches}
+          checklistStates={checklists}
           allowDrop
         />
 
@@ -1555,6 +1791,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
                   : '',
               ].filter(Boolean).join(' · ') || t.futureSprintHint}
               count={(ticketsByLane[`sprint:${sprint.id}`] || []).length}
+              points={lanePoints[`sprint:${sprint.id}`] || 0}
               laneId={`sprint:${sprint.id}`}
               tickets={ticketsByLane[`sprint:${sprint.id}`] || []}
               t={t}
@@ -1565,6 +1802,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
               onOpenTicket={openTicket}
               dropTargetLane={dropTargetLane}
               objectiveMatches={objectiveMatches}
+              checklistStates={checklists}
               allowDrop
             />
           ))
@@ -1575,6 +1813,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
             title={t.archive}
             subtitle={t.archiveHint}
             count={(ticketsByLane.archive || []).length}
+            points={lanePoints.archive || 0}
             laneId="archive"
             tickets={ticketsByLane.archive || []}
             t={t}
@@ -1585,6 +1824,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
             onOpenTicket={openTicket}
             dropTargetLane={dropTargetLane}
             objectiveMatches={objectiveMatches}
+            checklistStates={checklists}
             allowDrop
           />
         )}
@@ -1609,6 +1849,8 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
               onRefinementDraftChange={onRefinementDraftChange}
               onGenerateRefinement={generateRefinement}
               aiRefinement={aiRefinement}
+              checklistState={checklists[selectedTicket.key] || null}
+              onToggleChecklist={toggleChecklist}
               onApplyRefinement={applyRefinement}
               onClose={() => setSelectedTicket(null)}
             />

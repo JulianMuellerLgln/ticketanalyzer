@@ -99,6 +99,7 @@ export async function setupMocks(page, overrides = {}) {
             created: new Date(Date.now() - 5 * 86400000).toISOString(),
             updated: new Date(Date.now() - 1 * 86400000).toISOString(),
             duedate: new Date(Date.now() + 5 * 86400000).toISOString(),
+            customfield_10016: 5,
             labels: ['auth', 'frontend'],
             components: [{ name: 'Portal UI' }],
             fixVersions: [{ name: '2026.09' }],
@@ -132,6 +133,7 @@ export async function setupMocks(page, overrides = {}) {
             status: { name: 'Open' },
             description: 'Acceptance criteria: app should no longer crash on iOS Safari.',
             created: new Date(Date.now() - 12 * 86400000).toISOString(),
+            customfield_10016: 3,
             labels: ['ios', 'self-service'],
           },
         },
@@ -143,6 +145,7 @@ export async function setupMocks(page, overrides = {}) {
             status: { name: 'Backlog' },
             description: 'Theme switcher for user settings.',
             created: new Date(Date.now() - 30 * 86400000).toISOString(),
+            customfield_10016: 8,
             customfield_10005: [
               {
                 id: 12,
@@ -163,6 +166,9 @@ export async function setupMocks(page, overrides = {}) {
             status: { name: 'Done' },
             description: 'Completed spike and implementation.',
             created: new Date(Date.now() - 8 * 86400000).toISOString(),
+            updated: new Date(Date.now() - 1 * 86400000).toISOString(),
+            resolutiondate: new Date(Date.now() - 1 * 86400000).toISOString(),
+            customfield_10016: 2,
             customfield_10005: [
               {
                 id: 11,
@@ -216,6 +222,7 @@ export async function setupMocks(page, overrides = {}) {
     placements: {},
     sprints: {},
     showArchive: true,
+    checklists: {},
     ...(mocks.boardState || {}),
   };
 
@@ -234,6 +241,7 @@ export async function setupMocks(page, overrides = {}) {
         placements: {},
         sprints: {},
         showArchive: true,
+        checklists: {},
         ...(route.request().postDataJSON() || {}),
       };
     }

@@ -91,6 +91,7 @@ function sanitizeBoardState(input) {
     sprints: sanitizeBoardSprints(input?.sprints),
     showArchive: input?.showArchive !== false,
     planning: sanitizePlanningState(input?.planning),
+    checklists: sanitizeBoardChecklists(input?.checklists),
   };
 }
 
@@ -100,6 +101,31 @@ function sanitizePlanningState(planning) {
     openQuestions: asText(planning?.openQuestions),
     teamAbsences: asText(planning?.teamAbsences),
   };
+}
+
+function sanitizeTicketChecklistSection(section) {
+  if (!section || typeof section !== 'object' || Array.isArray(section)) return {};
+  const out = {};
+  for (const [itemKey, checked] of Object.entries(section)) {
+    const key = asText(itemKey);
+    if (!key || typeof checked !== 'boolean') continue;
+    out[key] = checked;
+  }
+  return out;
+}
+
+function sanitizeBoardChecklists(checklists) {
+  if (!checklists || typeof checklists !== 'object' || Array.isArray(checklists)) return {};
+  const out = {};
+  for (const [ticketKey, state] of Object.entries(checklists)) {
+    const key = asText(ticketKey);
+    if (!key || !state || typeof state !== 'object' || Array.isArray(state)) continue;
+    out[key] = {
+      ready: sanitizeTicketChecklistSection(state.ready),
+      done: sanitizeTicketChecklistSection(state.done),
+    };
+  }
+  return out;
 }
 
 function getClient() {
@@ -668,6 +694,7 @@ module.exports = {
   sanitizeBoardSprints,
   sanitizeBoardState,
   sanitizePlanningState,
+  sanitizeBoardChecklists,
   normalizeAnalysis,
   normalizeRefinementSuggestion,
   isRetryable,

@@ -54,6 +54,7 @@ test('GET /api/board-state returns sanitized defaults for unknown projects', asy
       openQuestions: '',
       teamAbsences: '',
     },
+    checklists: {},
   });
 });
 
@@ -101,6 +102,22 @@ test('PUT /api/board-state persists only supported board state fields', async (t
       openQuestions: 'Do we need SSO parity?',
       teamAbsences: 'Ada out on Friday',
     },
+    checklists: {
+      'AXON-1': {
+        ready: {
+          acceptance: true,
+          estimate: true,
+          ignoreMe: 'nope',
+        },
+        done: {
+          tests: false,
+          merged: true,
+        },
+      },
+      '': {
+        ready: { titleDescription: true },
+      },
+    },
     ignoredTopLevel: true,
   };
 
@@ -130,6 +147,18 @@ test('PUT /api/board-state persists only supported board state fields', async (t
       sprintGoalDraft: 'Reduce onboarding support load',
       openQuestions: 'Do we need SSO parity?',
       teamAbsences: 'Ada out on Friday',
+    },
+    checklists: {
+      'AXON-1': {
+        ready: {
+          acceptance: true,
+          estimate: true,
+        },
+        done: {
+          tests: false,
+          merged: true,
+        },
+      },
     },
   };
 

@@ -1,19 +1,26 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import TicketLink from './TicketLink';
 
-const STATUS_COLOR = { open: '#555', 'in progress': '#888', done: '#e53e3e' };
+const STATUS_COLOR = { done: '#22c55e', open: '#666', 'in progress': '#888' };
 
 function normalizeStatus(raw) {
-  const v = String(raw || '').toLowerCase();
-  if (v.includes('done') || v.includes('erledigt') || v.includes('closed')) return 'done';
-  if (v.includes('progress') || v.includes('arbeit') || v.includes('doing')) return 'in progress';
+  const value = String(raw || '').toLowerCase();
+  if (value.includes('done') || value.includes('erledigt') || value.includes('closed') || value.includes('fertig')) return 'done';
+  if (value.includes('progress') || value.includes('arbeit') || value.includes('doing')) return 'in progress';
   return 'open';
 }
 
+function storyPoints(issue) {
+  const value = issue?.fields?.customfield_10016;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function milestoneDate(issue) {
-  const due = issue?.fields?.duedate;
-  const updated = issue?.fields?.updated;
-  return due || (updated ? new Date(updated).toISOString().slice(0, 10) : '');
+  const delivered = issue?.fields?.resolutiondate || issue?.fields?.duedate || issue?.fields?.updated;
+  if (!delivered) return '';
+  const parsed = new Date(delivered);
+  return Number.isNaN(parsed.getTime()) ? String(delivered) : parsed.toISOString().slice(0, 10);
 }
 
 function milestoneReactKey(issue, idx) {
@@ -25,28 +32,40 @@ function milestoneReactKey(issue, idx) {
 }
 
 export default function Roadmap({ t, issues = [], jiraBaseUrl }) {
-  const milestones = (issues || []).slice(0, 120)
+  const milestones = (issues || [])
+    .filter((issue) => normalizeStatus(issue?.fields?.status?.name) === 'done')
+    .slice(0, 120)
     .map((issue, idx) => ({
       id: milestoneReactKey(issue, idx),
       key: issue.key,
       title: issue.fields?.summary || t.noData,
       date: milestoneDate(issue),
       status: normalizeStatus(issue.fields?.status?.name),
+      points: storyPoints(issue),
+      version: issue?.fields?.fixVersions?.[0]?.name || '',
     }))
     .sort((a, b) => {
       if (!a.date && !b.date) return 0;
       if (!a.date) return 1;
       if (!b.date) return -1;
-      return a.date.localeCompare(b.date);
+      return b.date.localeCompare(a.date);
     })
     .slice(0, 40);
 
+  const totalPoints = milestones.reduce((sum, item) => sum + item.points, 0);
+
   return (
     <div className="roadmap">
+      <div className="workflow-panel-subtitle">{t.roadmapSubtitle}</div>
+      <div className="workflow-meta-row" style={{ marginTop: 10, marginBottom: 10 }}>
+        <span className="workflow-chip">{milestones.length} {t.doneCount}</span>
+        <span className="workflow-chip">{totalPoints} {t.points}</span>
+      </div>
+
       <div className="roadmap-timeline">
         {milestones.length === 0 && (
           <div className="muted" style={{ fontSize: 12, padding: '8px 0' }}>
-            {t.noIssues}
+            {t.roadmapEmpty}
           </div>
         )}
         <AnimatePresence>
@@ -72,7 +91,9 @@ export default function Roadmap({ t, issues = [], jiraBaseUrl }) {
                     </>
                   ) : ms.title}
                 </span>
-                {ms.date && <span className="milestone-date">{ms.date}</span>}
+                {ms.date && <span className="milestone-date">{t.deliveredAt}: {ms.date}</span>}
+                {ms.version && <span className="milestone-date">{ms.version}</span>}
+                <span className="milestone-date">{ms.points} {t.points}</span>
                 <span
                   className="milestone-status"
                   style={{ color: STATUS_COLOR[ms.status] || '#888' }}

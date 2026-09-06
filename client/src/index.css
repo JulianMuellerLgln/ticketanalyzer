@@ -492,6 +492,32 @@ html, body {
   color: var(--muted);
 }
 
+.definition-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.checklist-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.checklist-item input {
+  margin-top: 2px;
+}
+
 .workflow-ticket-list {
   display: flex;
   flex-direction: column;
@@ -632,6 +658,13 @@ html, body {
   border-bottom: 1px solid var(--border);
 }
 
+.sprint-section-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .sprint-section-title {
   font-size: 11px;
   font-weight: 700;
@@ -675,12 +708,14 @@ html, body {
   display: grid;
   grid-template-columns:
     105px
-    minmax(240px, 1.8fr)
-    minmax(150px, 1.1fr)
-    minmax(150px, 1.1fr)
+    minmax(220px, 1.7fr)
+    minmax(135px, 1fr)
+    minmax(135px, 1fr)
+    70px
     95px
     130px
-    80px
+    70px
+    70px
     minmax(180px, 1.1fr);
   gap: 10px;
   align-items: center;
@@ -723,9 +758,10 @@ html, body {
 
 .ticket-table-key,
 .ticket-table-summary,
+.ticket-table-points,
 .ticket-table-priority,
 .ticket-table-status,
-.ticket-table-days,
+.ticket-table-progress,
 .ticket-table-acceptance {
   min-width: 0;
 }
@@ -734,19 +770,23 @@ html, body {
 .ticket-table-product,
 .ticket-table-objective,
 .ticket-table-status,
-.ticket-table-priority {
+.ticket-table-priority,
+.ticket-table-progress,
+.ticket-table-points {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.ticket-table-points,
+.ticket-table-progress {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .ticket-table-product,
 .ticket-table-objective {
   font-size: 11px;
-}
-
-.ticket-table-days {
-  color: var(--muted);
 }
 
 .ticket-table-acceptance {
@@ -1256,7 +1296,7 @@ html, body {
 
   .ticket-table-header,
   .ticket-table-row {
-    grid-template-columns: 110px minmax(220px, 1.6fr) 110px 140px 80px 180px;
+    grid-template-columns: 105px minmax(220px, 1.6fr) 120px 120px 60px 90px 110px 60px 60px 160px;
   }
 
   .js-form-grid {
