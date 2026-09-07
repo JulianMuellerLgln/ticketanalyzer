@@ -54,6 +54,7 @@ export default function App() {
 
   const [llm, setLlm] = useState({ online: false, models: [], defaultModel: '', recommendedModel: '' });
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(LLM_MODEL_STORAGE_KEY) || '');
+  const [llmSmoke, setLlmSmoke] = useState({ loading: false, ok: null, response: '', error: '', model: '', durationMs: 0 });
   const topbarRef = useRef(null);
 
   // Poll LLM health every 15s
@@ -122,6 +123,30 @@ export default function App() {
       setRefreshing(false);
     }
   }, [selectedProject]);
+
+  const runLlmSmokeTest = useCallback(async () => {
+    setLlmSmoke({ loading: true, ok: null, response: '', error: '', model: '', durationMs: 0 });
+    try {
+      const result = await api.llmSmokeTest(selectedModel);
+      setLlmSmoke({
+        loading: false,
+        ok: Boolean(result?.ok),
+        response: String(result?.response || '').trim(),
+        error: '',
+        model: String(result?.model || selectedModel || ''),
+        durationMs: Number(result?.durationMs) || 0,
+      });
+    } catch (error) {
+      setLlmSmoke({
+        loading: false,
+        ok: false,
+        response: '',
+        error: error?.response?.data?.error || error.message || 'LLM smoke test failed',
+        model: selectedModel,
+        durationMs: 0,
+      });
+    }
+  }, [selectedModel]);
 
   // Auto-refresh hourly
   useEffect(() => {
@@ -248,6 +273,30 @@ export default function App() {
                 ));
               })()}
             </select>
+
+            <button
+              className="btn-icon"
+              onClick={runLlmSmokeTest}
+              disabled={!llm.online || (llm.models || []).length === 0 || llmSmoke.loading}
+              title={t.llmSmokeTest}
+              type="button"
+            >
+              {llmSmoke.loading ? t.llmSmokeRunning : t.llmSmokeTest}
+            </button>
+
+            {llmSmoke.ok !== null && (
+              <span
+                className={`toolbar-chip${llmSmoke.ok ? ' toolbar-chip--ok' : ' toolbar-chip--error'}`}
+                title={llmSmoke.ok
+                  ? `${llmSmoke.model} · ${llmSmoke.response}`
+                  : `${llmSmoke.model} · ${llmSmoke.error}`}
+              >
+                {llmSmoke.ok ? t.llmSmokeOk : t.llmSmokeFailed}
+                {llmSmoke.model ? ` · ${llmSmoke.model}` : ''}
+                {llmSmoke.durationMs > 0 ? ` · ${Math.round(llmSmoke.durationMs / 100) / 10}s` : ''}
+                {llmSmoke.ok && llmSmoke.response ? ` · ${llmSmoke.response}` : ''}
+              </span>
+            )}
 
             <button
               className="btn-icon"

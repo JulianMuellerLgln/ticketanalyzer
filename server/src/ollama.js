@@ -61,6 +61,10 @@ function buildChatError(message, reason, status, details) {
   return err;
 }
 
+function buildSmokeTestPrompt() {
+  return 'Reply with exactly the single word pong. No punctuation, no explanation.';
+}
+
 async function checkHealth() {
   try {
     const res = await axios.get(`${getOllamaBase()}/api/tags`, { timeout: 5000 });
@@ -299,6 +303,7 @@ Return ONLY valid JSON.`;
 module.exports = {
   checkHealth,
   chat,
+  buildSmokeTestPrompt,
   buildAnalysisPrompt,
   buildIdeaEvalPrompt,
   buildRefinementPrompt,

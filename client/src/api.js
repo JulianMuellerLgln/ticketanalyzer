@@ -25,6 +25,8 @@ export const api = {
   updateIssue: (issueKey, fields) =>
     axios.put(`${BASE}/jira/issues/${encodeURIComponent(issueKey)}`, { fields }).then((r) => r.data),
   llmHealth: () => axios.get(`${BASE}/llm/health`).then((r) => r.data),
+  llmSmokeTest: (model) =>
+    axios.post(`${BASE}/llm/smoke-test`, { model }).then((r) => r.data),
   analyze: (key, lang, model) =>
     axios.post(`${BASE}/llm/analyze/${key}`, { model }, { params: { lang } }).then((r) => r.data),
   refineTicket: (payload) =>

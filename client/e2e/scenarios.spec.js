@@ -607,3 +607,21 @@ test('Szenario 17: Topbar bleibt sticky beim Scrollen', async ({ page }) => {
   expect(topbarBox.y).toBeLessThanOrEqual(1);
   expect(topbarBox.y).toBeGreaterThanOrEqual(-1);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 18: LLM-Smoketest prueft das ausgewaehlte Modell
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 18: LLM-Smoketest prueft das ausgewaehlte Modell', async ({ page }) => {
+  const captures = {};
+  await setupMocks(page, { captures });
+  await page.goto('/');
+  await page.waitForTimeout(400);
+
+  await page.locator('.toolbar-right select.input').selectOption('qwen3:4b');
+  await page.getByRole('button', { name: 'Test LLM' }).click();
+  await page.waitForTimeout(300);
+
+  await expect(page.getByText('LLM test ok')).toBeVisible();
+  await expect(page.getByText('pong')).toBeVisible();
+  expect(captures.llmSmokeTest.model).toBe('qwen3:4b');
+});

@@ -18,7 +18,15 @@ const {
   getJiraConfigStatus,
   classifyJiraError,
 } = require('./src/jira');
-const { checkHealth, chat, buildAnalysisPrompt, buildIdeaEvalPrompt, buildRefinementPrompt } = require('./src/ollama');
+const {
+  checkHealth,
+  chat,
+  buildSmokeTestPrompt,
+  buildAnalysisPrompt,
+  buildIdeaEvalPrompt,
+  buildRefinementPrompt,
+  resolveModel,
+} = require('./src/ollama');
 
 const app = express();
 app.use(cors());
@@ -578,6 +586,30 @@ app.put('/api/jira/issues/:issueKey', async (req, res) => {
 app.get('/api/llm/health', async (req, res) => {
   const result = await checkHealth();
   res.json(result);
+});
+
+app.post('/api/llm/smoke-test', async (req, res) => {
+  const requestedModel = asText(req.body?.model);
+  const model = resolveModel(requestedModel);
+  try {
+    const startedAt = Date.now();
+    const response = asText(await chat(buildSmokeTestPrompt(), { model })).replace(/\s+/g, ' ');
+    const normalized = response.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    res.json({
+      ok: normalized.includes('pong'),
+      model,
+      prompt: buildSmokeTestPrompt(),
+      response,
+      durationMs: Date.now() - startedAt,
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      ok: false,
+      model,
+      error: e.message,
+      reason: e.reason || 'llm_error',
+    });
+  }
 });
 
 app.post('/api/llm/analyze/:projectKey', async (req, res) => {

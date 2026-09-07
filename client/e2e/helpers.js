@@ -220,6 +220,12 @@ export async function setupMocks(page, overrides = {}) {
         'Estimate effort with the team.',
       ],
     },
+    llmSmokeTest: {
+      ok: true,
+      model: 'qwen3:14b',
+      response: 'pong',
+      durationMs: 850,
+    },
   };
 
   const mocks = { ...defaults, ...overrides };
@@ -290,6 +296,12 @@ export async function setupMocks(page, overrides = {}) {
     {
       captures.evaluateIdea = route.request().postDataJSON?.() || {};
       return route.fulfill({ json: mocks.evaluateIdea });
+    }
+  );
+  await page.route('**/api/llm/smoke-test', (route) =>
+    {
+      captures.llmSmokeTest = route.request().postDataJSON?.() || {};
+      return route.fulfill({ json: mocks.llmSmokeTest });
     }
   );
   await page.route('**/api/llm/refine-ticket', (route) =>

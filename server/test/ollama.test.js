@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+  buildSmokeTestPrompt,
   pickPreferredModel,
   resolveModel,
   parseModelBillions,
@@ -24,4 +25,8 @@ test('resolveModel prefers explicit request model over default', () => {
 test('parseModelBillions extracts model size when present', () => {
   assert.equal(parseModelBillions('qwen3:14b-q4_K_M'), 14);
   assert.equal(parseModelBillions('custom-model'), 0);
+});
+
+test('buildSmokeTestPrompt asks for a minimal pong response', () => {
+  assert.match(buildSmokeTestPrompt(), /single word pong/i);
 });
