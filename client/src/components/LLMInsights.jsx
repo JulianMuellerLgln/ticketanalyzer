@@ -51,7 +51,7 @@ function Section({ icon, label, children, defaultOpen = false }) {
   );
 }
 
-export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseUrl }) {
+export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseUrl, llmModel }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
@@ -64,7 +64,7 @@ export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseU
     setLoading(true);
     setErr(null);
     try {
-      const res = await api.analyze(projectKey, lang);
+      const res = await api.analyze(projectKey, lang, llmModel);
       setData(res);
     } catch (e) {
       setErr(e?.response?.data?.error || e.message || 'Analysis failed');

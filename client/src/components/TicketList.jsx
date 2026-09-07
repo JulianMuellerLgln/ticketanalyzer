@@ -42,6 +42,33 @@ const DEFAULT_DAILY_ADVICE_STATE = {
 const READY_CHECK_KEYS = ['titleDescription', 'acceptance', 'objective', 'component', 'estimate', 'dependencies'];
 const DONE_CHECK_KEYS = ['tests', 'docs', 'openPoints', 'acceptanceVerified', 'merged'];
 const DEFAULT_CHECKLISTS_STATE = {};
+const TABLE_COLUMN_IDS = ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'];
+const COLUMN_WIDTHS = {
+  ticket: '105px',
+  summary: 'minmax(220px, 1.7fr)',
+  product: 'minmax(135px, 1fr)',
+  objective: 'minmax(135px, 1fr)',
+  points: '70px',
+  priority: '95px',
+  status: '130px',
+  ready: '70px',
+  done: '70px',
+  acceptance: 'minmax(180px, 1.1fr)',
+};
+function defaultTableState() {
+  return {
+    columnOrder: [...TABLE_COLUMN_IDS],
+    sortBy: '',
+    sortDir: 'asc',
+  };
+}
+const PRIORITY_RANK = {
+  Highest: 5,
+  High: 4,
+  Medium: 3,
+  Low: 2,
+  Lowest: 1,
+};
 
 const STOP_WORDS = new Set([
   'the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'oder', 'und', 'der', 'die', 'das',
@@ -246,6 +273,22 @@ function mergePlacements(previous, tickets) {
     next[ticket.key] = ticket.done ? 'archive' : (previous[ticket.key] || deriveDefaultLane(ticket));
   }
   return next;
+}
+
+function sanitizeColumnOrder(order) {
+  const source = Array.isArray(order) ? order : [];
+  const deduped = source.filter((id, idx) => TABLE_COLUMN_IDS.includes(id) && source.indexOf(id) === idx);
+  return [...deduped, ...TABLE_COLUMN_IDS.filter((id) => !deduped.includes(id))];
+}
+
+function sanitizeTableState(table) {
+  const sortBy = TABLE_COLUMN_IDS.includes(table?.sortBy) ? table.sortBy : '';
+  const sortDir = table?.sortDir === 'desc' ? 'desc' : 'asc';
+  return {
+    columnOrder: sanitizeColumnOrder(table?.columnOrder),
+    sortBy,
+    sortDir,
+  };
 }
 
 function daysRemaining(endDate) {
@@ -1048,6 +1091,73 @@ function TicketDetailsModal({
   );
 }
 
+function tableColumnDefs(t) {
+  return {
+    ticket: { id: 'ticket', label: t.ticket },
+    summary: { id: 'summary', label: t.summary },
+    product: { id: 'product', label: t.productOrComponent },
+    objective: { id: 'objective', label: t.objective },
+    points: { id: 'points', label: t.points },
+    priority: { id: 'priority', label: t.priority },
+    status: { id: 'status', label: t.status },
+    ready: { id: 'ready', label: t.readyCheck },
+    done: { id: 'done', label: t.doneCheck },
+    acceptance: { id: 'acceptance', label: t.acceptanceCriteria },
+  };
+}
+
+function ticketSortValue(ticket, columnId, objectiveMatch, checklistProgress) {
+  if (columnId === 'ticket') return String(ticket.key || '');
+  if (columnId === 'summary') return String(ticket.fields.summary || '');
+  if (columnId === 'product') return primaryComponentName(ticket).toLowerCase();
+  if (columnId === 'objective') return String(objectiveMatch?.objectiveKey || '');
+  if (columnId === 'points') return storyPoints(ticket);
+  if (columnId === 'priority') return PRIORITY_RANK[ticket.fields.priority?.name] || 0;
+  if (columnId === 'status') return String(ticket.fields.status?.name || '');
+  if (columnId === 'ready') return checklistProgress.ready.completed / checklistProgress.ready.total;
+  if (columnId === 'done') return checklistProgress.done.completed / checklistProgress.done.total;
+  if (columnId === 'acceptance') return ticket.acceptanceScore;
+  return '';
+}
+
+function renderTicketCell(columnId, { ticket, t, objectiveMatch, checklistProgress, acceptanceMeta, acceptanceTone, productName }) {
+  if (columnId === 'ticket') {
+    return (
+      <span className="ticket-table-key">
+        <span className="ticket-key">{ticket.key}</span>
+      </span>
+    );
+  }
+  if (columnId === 'summary') {
+    return <span className="ticket-table-summary" title={ticket.fields.summary}>{ticket.fields.summary}</span>;
+  }
+  if (columnId === 'product') {
+    return <span className={`ticket-table-product${productName ? '' : ' ticket-table-product--missing'}`}>{productName || t.noProductAssigned}</span>;
+  }
+  if (columnId === 'objective') {
+    return (
+      <span className={`ticket-table-objective${objectiveMatch ? '' : ' ticket-table-objective--missing'}`} title={objectiveMatch?.objectiveSummary || t.noObjectiveMatch}>
+        {objectiveMatch ? objectiveMatch.objectiveKey : t.noObjectiveMatch}
+      </span>
+    );
+  }
+  if (columnId === 'points') return <span className="ticket-table-points">{storyPoints(ticket)}</span>;
+  if (columnId === 'priority') {
+    return <span className="ticket-table-priority" style={{ color: PRIORITY_TONE[ticket.fields.priority?.name] || '#aaa' }}>{ticket.fields.priority?.name || '—'}</span>;
+  }
+  if (columnId === 'status') return <span className="ticket-table-status">{ticket.fields.status?.name || '—'}</span>;
+  if (columnId === 'ready') return <span className="ticket-table-progress">{progressLabel(checklistProgress.ready)}</span>;
+  if (columnId === 'done') return <span className="ticket-table-progress">{progressLabel(checklistProgress.done)}</span>;
+  if (columnId === 'acceptance') {
+    return (
+      <span className="ticket-table-acceptance" style={{ background: acceptanceTone.bg, borderColor: acceptanceTone.border, color: acceptanceTone.color }}>
+        {acceptanceMeta.text}
+      </span>
+    );
+  }
+  return <span>—</span>;
+}
+
 function Section({
   title,
   subtitle,
@@ -1064,8 +1174,32 @@ function Section({
   dropTargetLane,
   objectiveMatches,
   checklistStates,
+  columns = TABLE_COLUMN_IDS,
+  sortBy = '',
+  sortDir = 'asc',
+  onSort,
+  onReorderColumn,
   allowDrop = true,
 }) {
+  const gridTemplateColumns = columns.map((columnId) => COLUMN_WIDTHS[columnId] || 'minmax(120px, 1fr)').join(' ');
+  const defs = tableColumnDefs(t);
+  const prepared = tickets
+    .map((ticket, idx) => {
+      const objectiveMatch = objectiveMatches[ticket.key] || null;
+      const checklistProgress = checklistProgressMap(ticket, checklistStates[ticket.key], objectiveMatch);
+      return { ticket, idx, objectiveMatch, checklistProgress };
+    })
+    .sort((left, right) => {
+      if (!sortBy) return left.idx - right.idx;
+      const leftValue = ticketSortValue(left.ticket, sortBy, left.objectiveMatch, left.checklistProgress);
+      const rightValue = ticketSortValue(right.ticket, sortBy, right.objectiveMatch, right.checklistProgress);
+      if (typeof leftValue === 'number' && typeof rightValue === 'number') {
+        return sortDir === 'asc' ? leftValue - rightValue : rightValue - leftValue;
+      }
+      const cmp = String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true, sensitivity: 'base' });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
   return (
     <div
       className={`sprint-section${dropTargetLane === laneId ? ' sprint-section--drop-target' : ''}`}
@@ -1097,17 +1231,36 @@ function Section({
       </div>
 
       <div className="ticket-table">
-        <div className="ticket-table-header">
-          <span>{t.ticket}</span>
-          <span>{t.summary}</span>
-          <span>{t.productOrComponent}</span>
-          <span>{t.objective}</span>
-          <span>{t.points}</span>
-          <span>{t.priority}</span>
-          <span>{t.status}</span>
-          <span>{t.readyCheck}</span>
-          <span>{t.doneCheck}</span>
-          <span>{t.acceptanceCriteria}</span>
+        <div className="ticket-table-header" style={{ gridTemplateColumns }}>
+          {columns.map((columnId) => (
+            <button
+              key={`col-header-${columnId}`}
+              type="button"
+              className="ticket-table-header-btn"
+              draggable
+              onClick={() => onSort?.(columnId)}
+              onDragStart={(event) => {
+                event.stopPropagation();
+                event.dataTransfer.setData('text/column-id', columnId);
+                event.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const sourceColumn = event.dataTransfer.getData('text/column-id');
+                onReorderColumn?.(sourceColumn, columnId);
+              }}
+            >
+              <span>{defs[columnId]?.label || columnId}</span>
+              <span className="ticket-table-sort-indicator">
+                {sortBy === columnId ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+              </span>
+            </button>
+          ))}
         </div>
 
         <div className="ticket-table-body">
@@ -1115,17 +1268,16 @@ function Section({
             {tickets.length === 0 && (
               <div className="muted sprint-empty">{t.noIssues}</div>
             )}
-            {tickets.map((ticket, idx) => {
+            {prepared.map(({ ticket, idx, objectiveMatch, checklistProgress }) => {
               const acceptanceMeta = getAcceptanceMeta(ticket.acceptanceScore, t);
               const acceptanceTone = ACCEPTANCE_LEVELS[ticket.acceptanceScore] || ACCEPTANCE_LEVELS[0];
-              const objectiveMatch = objectiveMatches[ticket.key] || null;
-              const checklistProgress = checklistProgressMap(ticket, checklistStates[ticket.key], objectiveMatch);
               const productName = primaryComponentName(ticket);
               return (
                 <motion.button
                   key={safeIssueReactKey(ticket, idx)}
                   type="button"
                   className="ticket-table-row"
+                  style={{ gridTemplateColumns }}
                   draggable
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1135,36 +1287,11 @@ function Section({
                   onDragEnd={onDragEnd}
                   onClick={() => onOpenTicket(ticket)}
                 >
-                  <span className="ticket-table-key">
-                    <span className="ticket-key">{ticket.key}</span>
-                  </span>
-                  <span className="ticket-table-summary" title={ticket.fields.summary}>{ticket.fields.summary}</span>
-                  <span className={`ticket-table-product${productName ? '' : ' ticket-table-product--missing'}`}>
-                    {productName || t.noProductAssigned}
-                  </span>
-                  <span
-                    className={`ticket-table-objective${objectiveMatch ? '' : ' ticket-table-objective--missing'}`}
-                    title={objectiveMatch?.objectiveSummary || t.noObjectiveMatch}
-                  >
-                    {objectiveMatch ? objectiveMatch.objectiveKey : t.noObjectiveMatch}
-                  </span>
-                  <span className="ticket-table-points">{storyPoints(ticket)}</span>
-                  <span className="ticket-table-priority" style={{ color: PRIORITY_TONE[ticket.fields.priority?.name] || '#aaa' }}>
-                    {ticket.fields.priority?.name || '—'}
-                  </span>
-                  <span className="ticket-table-status">{ticket.fields.status?.name || '—'}</span>
-                  <span className="ticket-table-progress">{progressLabel(checklistProgress.ready)}</span>
-                  <span className="ticket-table-progress">{progressLabel(checklistProgress.done)}</span>
-                  <span
-                    className="ticket-table-acceptance"
-                    style={{
-                      background: acceptanceTone.bg,
-                      borderColor: acceptanceTone.border,
-                      color: acceptanceTone.color,
-                    }}
-                  >
-                    {acceptanceMeta.text}
-                  </span>
+                  {columns.map((columnId) => (
+                    <span key={`${ticket.key}-${columnId}`} className={`ticket-cell ticket-cell--${columnId}`}>
+                      {renderTicketCell(columnId, { ticket, t, objectiveMatch, checklistProgress, acceptanceMeta, acceptanceTone, productName })}
+                    </span>
+                  ))}
                 </motion.button>
               );
             })}
@@ -1175,13 +1302,14 @@ function Section({
   );
 }
 
-export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflowMode, lang, onRefresh }) {
+export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflowMode, lang, onRefresh, llmModel }) {
   const [q, setQ] = useState('');
   const [showArchive, setShowArchive] = useState(true);
   const [sprints, setSprints] = useState({});
   const [placements, setPlacements] = useState({});
   const [planning, setPlanning] = useState(DEFAULT_PLANNING_STATE);
   const [checklists, setChecklists] = useState(DEFAULT_CHECKLISTS_STATE);
+  const [tableState, setTableState] = useState(defaultTableState);
   const [availableComponents, setAvailableComponents] = useState([]);
   const [objectiveContext, setObjectiveContext] = useState({ board: null, issues: [] });
   const [dropTargetLane, setDropTargetLane] = useState('');
@@ -1218,6 +1346,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         setPlacements({});
         setPlanning(DEFAULT_PLANNING_STATE);
         setChecklists(DEFAULT_CHECKLISTS_STATE);
+        setTableState(defaultTableState());
         setPersistError('');
         setPersistReady(false);
         setSelectedTicket(null);
@@ -1234,6 +1363,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         setPlacements(state.placements || {});
         setPlanning({ ...DEFAULT_PLANNING_STATE, ...(state.planning || {}) });
         setChecklists(state.checklists || DEFAULT_CHECKLISTS_STATE);
+        setTableState(sanitizeTableState(state.table));
         setPersistError('');
       } catch (e) {
         if (cancelled) return;
@@ -1242,6 +1372,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         setPlacements({});
         setPlanning(DEFAULT_PLANNING_STATE);
         setChecklists(DEFAULT_CHECKLISTS_STATE);
+        setTableState(defaultTableState());
         setPersistError(e?.response?.data?.error || e.message || 'Failed to load board state');
       } finally {
         if (!cancelled) setPersistReady(true);
@@ -1314,7 +1445,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     async function persistBoardState() {
       if (!projectKey || !persistReady) return;
       try {
-        await api.saveBoardState(projectKey, { placements, sprints, showArchive, planning, checklists });
+        await api.saveBoardState(projectKey, { placements, sprints, showArchive, planning, checklists, table: tableState });
         if (!cancelled) setPersistError('');
       } catch (e) {
         if (!cancelled) {
@@ -1327,7 +1458,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     return () => {
       cancelled = true;
     };
-  }, [checklists, placements, persistReady, planning, projectKey, showArchive, sprints]);
+  }, [checklists, placements, persistReady, planning, projectKey, showArchive, sprints, tableState]);
 
   const sprintList = useMemo(
     () => Object.values(sprints).sort((a, b) => sprintSortValue(a).localeCompare(sprintSortValue(b))),
@@ -1456,6 +1587,27 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     setDropTargetLane('');
   }
 
+  function onSort(columnId) {
+    if (!TABLE_COLUMN_IDS.includes(columnId)) return;
+    setTableState((previous) => {
+      if (previous.sortBy !== columnId) return { ...previous, sortBy: columnId, sortDir: 'asc' };
+      return { ...previous, sortDir: previous.sortDir === 'asc' ? 'desc' : 'asc' };
+    });
+  }
+
+  function onReorderColumn(sourceId, targetId) {
+    if (!TABLE_COLUMN_IDS.includes(sourceId) || !TABLE_COLUMN_IDS.includes(targetId) || sourceId === targetId) return;
+    setTableState((previous) => {
+      const order = [...previous.columnOrder];
+      const fromIndex = order.indexOf(sourceId);
+      const targetIndex = order.indexOf(targetId);
+      if (fromIndex < 0 || targetIndex < 0) return previous;
+      order.splice(fromIndex, 1);
+      order.splice(targetIndex, 0, sourceId);
+      return { ...previous, columnOrder: order };
+    });
+  }
+
   function toggleChecklist(sectionKey, itemKey, checked) {
     if (!selectedTicket?.key) return;
     setChecklists((previous) => ({
@@ -1474,7 +1626,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     if (!projectKey) return;
     setDailyAdvice({ ...DEFAULT_DAILY_ADVICE_STATE, loading: true });
     try {
-      const analysis = await api.analyze(projectKey, lang);
+      const analysis = await api.analyze(projectKey, lang, llmModel);
       const planChanges = (analysis.suggestions || [])
         .map((entry) => [entry?.key, entry?.text].filter(Boolean).join(': '))
         .filter(Boolean);
@@ -1600,6 +1752,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     setAiRefinement({ ...DEFAULT_AI_STATE, loading: true });
     try {
       const result = await api.refineTicket({
+        model: llmModel,
         lang,
         ticket: {
           key: ticket.key,
@@ -1747,6 +1900,11 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
           dropTargetLane={dropTargetLane}
           objectiveMatches={objectiveMatches}
           checklistStates={checklists}
+          columns={tableState.columnOrder}
+          sortBy={tableState.sortBy}
+          sortDir={tableState.sortDir}
+          onSort={onSort}
+          onReorderColumn={onReorderColumn}
           allowDrop={Boolean(activeSprint)}
         />
 
@@ -1766,6 +1924,11 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
           dropTargetLane={dropTargetLane}
           objectiveMatches={objectiveMatches}
           checklistStates={checklists}
+          columns={tableState.columnOrder}
+          sortBy={tableState.sortBy}
+          sortDir={tableState.sortDir}
+          onSort={onSort}
+          onReorderColumn={onReorderColumn}
           allowDrop
         />
 
@@ -1803,6 +1966,11 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
               dropTargetLane={dropTargetLane}
               objectiveMatches={objectiveMatches}
               checklistStates={checklists}
+              columns={tableState.columnOrder}
+              sortBy={tableState.sortBy}
+              sortDir={tableState.sortDir}
+              onSort={onSort}
+              onReorderColumn={onReorderColumn}
               allowDrop
             />
           ))
@@ -1825,6 +1993,11 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
             dropTargetLane={dropTargetLane}
             objectiveMatches={objectiveMatches}
             checklistStates={checklists}
+            columns={tableState.columnOrder}
+            sortBy={tableState.sortBy}
+            sortDir={tableState.sortDir}
+            onSort={onSort}
+            onReorderColumn={onReorderColumn}
             allowDrop
           />
         )}

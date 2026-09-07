@@ -706,17 +706,6 @@ html, body {
 .ticket-table-header,
 .ticket-table-row {
   display: grid;
-  grid-template-columns:
-    105px
-    minmax(220px, 1.7fr)
-    minmax(135px, 1fr)
-    minmax(135px, 1fr)
-    70px
-    95px
-    130px
-    70px
-    70px
-    minmax(180px, 1.1fr);
   gap: 10px;
   align-items: center;
   min-width: 0;
@@ -730,6 +719,32 @@ html, body {
   text-transform: uppercase;
   color: var(--muted);
   background: rgba(255,255,255,0.02);
+}
+
+.ticket-table-header-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ticket-table-header-btn:hover {
+  color: var(--text);
+}
+
+.ticket-table-sort-indicator {
+  opacity: 0.75;
 }
 
 .ticket-table-body {
@@ -763,6 +778,10 @@ html, body {
 .ticket-table-status,
 .ticket-table-progress,
 .ticket-table-acceptance {
+  min-width: 0;
+}
+
+.ticket-cell {
   min-width: 0;
 }
 
@@ -1292,11 +1311,6 @@ html, body {
   .sprint-summary-card {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .ticket-table-header,
-  .ticket-table-row {
-    grid-template-columns: 105px minmax(220px, 1.6fr) 120px 120px 60px 90px 110px 60px 60px 160px;
   }
 
   .js-form-grid {

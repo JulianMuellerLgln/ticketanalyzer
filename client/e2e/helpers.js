@@ -4,7 +4,12 @@
  */
 export async function setupMocks(page, overrides = {}) {
   const defaults = {
-    llmHealth: { online: true, models: ['llama3.2'] },
+    llmHealth: {
+      online: true,
+      models: ['qwen3:14b', 'qwen3:4b', 'llama3.2'],
+      defaultModel: 'qwen3:14b',
+      recommendedModel: 'qwen3:14b',
+    },
     projects: [
       { key: 'AXON', name: 'Axon Platform' },
       { key: 'OPS', name: 'Operations' },
@@ -218,11 +223,17 @@ export async function setupMocks(page, overrides = {}) {
   };
 
   const mocks = { ...defaults, ...overrides };
+  const captures = mocks.captures || {};
   let boardState = {
     placements: {},
     sprints: {},
     showArchive: true,
     checklists: {},
+    table: {
+      columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'],
+      sortBy: '',
+      sortDir: 'asc',
+    },
     ...(mocks.boardState || {}),
   };
 
@@ -242,6 +253,11 @@ export async function setupMocks(page, overrides = {}) {
         sprints: {},
         showArchive: true,
         checklists: {},
+        table: {
+          columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'],
+          sortBy: '',
+          sortDir: 'asc',
+        },
         ...(route.request().postDataJSON() || {}),
       };
     }
@@ -263,13 +279,22 @@ export async function setupMocks(page, overrides = {}) {
     route.fulfill({ json: { lastRefresh: new Date().toISOString() } })
   );
   await page.route('**/api/llm/analyze/**', (route) =>
-    route.fulfill({ json: mocks.analyze })
+    {
+      captures.analyze = route.request().postDataJSON?.() || {};
+      return route.fulfill({ json: mocks.analyze });
+    }
   );
   await page.route('**/api/llm/evaluate-idea', (route) =>
-    route.fulfill({ json: mocks.evaluateIdea })
+    {
+      captures.evaluateIdea = route.request().postDataJSON?.() || {};
+      return route.fulfill({ json: mocks.evaluateIdea });
+    }
   );
   await page.route('**/api/llm/refine-ticket', (route) =>
-    route.fulfill({ json: mocks.refineTicket })
+    {
+      captures.refineTicket = route.request().postDataJSON?.() || {};
+      return route.fulfill({ json: mocks.refineTicket });
+    }
   );
   await page.route('**/api/jira/issues/**', (route) =>
     route.fulfill({ json: { ok: true } })

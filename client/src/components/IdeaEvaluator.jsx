@@ -23,7 +23,7 @@ function Meter({ label, value }) {
   );
 }
 
-export default function IdeaEvaluator({ t, lang }) {
+export default function IdeaEvaluator({ t, lang, llmModel }) {
   const [idea, setIdea] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -34,7 +34,7 @@ export default function IdeaEvaluator({ t, lang }) {
     setLoading(true);
     setErr(null);
     try {
-      const res = await api.evaluateIdea(idea.trim(), lang);
+      const res = await api.evaluateIdea(idea.trim(), lang, llmModel);
       setResult(res);
     } catch (e) {
       setErr(e.message);

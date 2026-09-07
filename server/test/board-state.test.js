@@ -55,6 +55,11 @@ test('GET /api/board-state returns sanitized defaults for unknown projects', asy
       teamAbsences: '',
     },
     checklists: {},
+    table: {
+      columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'],
+      sortBy: '',
+      sortDir: 'asc',
+    },
   });
 });
 
@@ -118,6 +123,12 @@ test('PUT /api/board-state persists only supported board state fields', async (t
         ready: { titleDescription: true },
       },
     },
+    table: {
+      columnOrder: ['status', 'ticket', 'summary', 'status', 'invalid-col'],
+      sortBy: 'priority',
+      sortDir: 'DESC',
+      random: true,
+    },
     ignoredTopLevel: true,
   };
 
@@ -159,6 +170,11 @@ test('PUT /api/board-state persists only supported board state fields', async (t
           merged: true,
         },
       },
+    },
+    table: {
+      columnOrder: ['status', 'ticket', 'summary', 'product', 'objective', 'points', 'priority', 'ready', 'done', 'acceptance'],
+      sortBy: 'priority',
+      sortDir: 'desc',
     },
   };
 

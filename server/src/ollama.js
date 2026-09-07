@@ -1,11 +1,46 @@
 const axios = require('axios');
+const DEFAULT_LARGE_MODEL = process.env.OLLAMA_MODEL || 'qwen3:14b';
 
 function getOllamaBase() {
   return process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 }
 
-function getModel() {
-  return process.env.OLLAMA_MODEL || 'llama3';
+function getConfiguredDefaultModel() {
+  return DEFAULT_LARGE_MODEL;
+}
+
+function parseModelBillions(name) {
+  const match = String(name || '').match(/(\d+(?:\.\d+)?)\s*b\b/i);
+  return match ? Number(match[1]) : 0;
+}
+
+function modelFamilyRank(name) {
+  const value = String(name || '').toLowerCase();
+  if (value.includes('qwen3')) return 500;
+  if (value.includes('qwen2.5')) return 450;
+  if (value.includes('qwen2')) return 425;
+  if (value.includes('deepseek')) return 375;
+  if (value.includes('llama3')) return 325;
+  return 0;
+}
+
+function pickPreferredModel(models = [], configuredDefault = getConfiguredDefaultModel()) {
+  const candidates = Array.isArray(models) ? models.filter(Boolean) : [];
+  if (candidates.length === 0) return configuredDefault;
+  if (configuredDefault && candidates.includes(configuredDefault)) return configuredDefault;
+
+  return [...candidates]
+    .sort((left, right) => {
+      const sizeDiff = parseModelBillions(right) - parseModelBillions(left);
+      if (sizeDiff !== 0) return sizeDiff;
+      const familyDiff = modelFamilyRank(right) - modelFamilyRank(left);
+      if (familyDiff !== 0) return familyDiff;
+      return left.localeCompare(right);
+    })[0];
+}
+
+function resolveModel(requestedModel) {
+  return String(requestedModel || '').trim() || getConfiguredDefaultModel();
 }
 
 function compactErrorData(data) {
@@ -30,20 +65,36 @@ async function checkHealth() {
   try {
     const res = await axios.get(`${getOllamaBase()}/api/tags`, { timeout: 5000 });
     const models = (res.data.models || []).map((m) => m.name);
+    const configuredDefault = getConfiguredDefaultModel();
+    const recommendedModel = pickPreferredModel(models, configuredDefault);
     if (models.length === 0) {
-      return { online: true, models, reason: 'no_models' };
+      return { online: true, models, reason: 'no_models', defaultModel: configuredDefault, recommendedModel };
     }
-    return { online: true, models, reason: 'ok' };
+    return { online: true, models, reason: 'ok', defaultModel: configuredDefault, recommendedModel };
   } catch (err) {
     if (err.code === 'ECONNABORTED') {
-      return { online: false, models: [], reason: 'timeout', error: 'Ollama health check timed out' };
+      return {
+        online: false,
+        models: [],
+        reason: 'timeout',
+        error: 'Ollama health check timed out',
+        defaultModel: getConfiguredDefaultModel(),
+        recommendedModel: getConfiguredDefaultModel(),
+      };
     }
-    return { online: false, models: [], reason: 'service_unreachable', error: err.message };
+    return {
+      online: false,
+      models: [],
+      reason: 'service_unreachable',
+      error: err.message,
+      defaultModel: getConfiguredDefaultModel(),
+      recommendedModel: getConfiguredDefaultModel(),
+    };
   }
 }
 
-async function chat(prompt) {
-  const model = getModel();
+async function chat(prompt, options = {}) {
+  const model = resolveModel(options.model);
   if (!model || !model.trim()) {
     throw buildChatError('OLLAMA_MODEL is not configured', 'missing_model', 500);
   }
@@ -245,4 +296,14 @@ Rules:
 Return ONLY valid JSON.`;
 }
 
-module.exports = { checkHealth, chat, buildAnalysisPrompt, buildIdeaEvalPrompt, buildRefinementPrompt };
+module.exports = {
+  checkHealth,
+  chat,
+  buildAnalysisPrompt,
+  buildIdeaEvalPrompt,
+  buildRefinementPrompt,
+  getConfiguredDefaultModel,
+  pickPreferredModel,
+  resolveModel,
+  parseModelBillions,
+};

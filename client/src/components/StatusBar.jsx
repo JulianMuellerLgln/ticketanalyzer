@@ -11,7 +11,7 @@ const dot = (ok) => ({
   boxShadow: ok ? '0 0 6px #22c55e' : 'none',
 });
 
-export default function StatusBar({ llm, jiraOk, projectCount, issueCount, lastRefresh, t }) {
+export default function StatusBar({ llm, selectedModel, jiraOk, projectCount, issueCount, lastRefresh, t }) {
   return (
     <div className="statusbar">
       <span className="statusbar-brand">
@@ -33,8 +33,8 @@ export default function StatusBar({ llm, jiraOk, projectCount, issueCount, lastR
             <Cpu size={11} style={{ marginRight: 4 }} />
             <span style={dot(llm?.online)} />
             {llm?.online ? t.llmOnline : t.llmOffline}
-            {llm?.online && llm.models?.length > 0 && (
-              <span className="status-model"> · {llm.models[0]}</span>
+            {llm?.online && (selectedModel || llm.recommendedModel || llm.defaultModel) && (
+              <span className="status-model"> · {(selectedModel || llm.recommendedModel || llm.defaultModel)}</span>
             )}
           </motion.span>
         </AnimatePresence>

@@ -27,6 +27,7 @@ app.use(express.json());
 // In-memory cache
 const cache = { projects: null, issues: {}, lastRefresh: null };
 const BOARD_STATE_FILE = process.env.BOARD_STATE_FILE || path.join(__dirname, 'data', 'board-state.json');
+const TABLE_COLUMNS = ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'];
 
 function isValidProjectKey(projectKey) {
   return /^[A-Z][A-Z0-9]+$/.test(projectKey);
@@ -92,6 +93,29 @@ function sanitizeBoardState(input) {
     showArchive: input?.showArchive !== false,
     planning: sanitizePlanningState(input?.planning),
     checklists: sanitizeBoardChecklists(input?.checklists),
+    table: sanitizeBoardTable(input?.table),
+  };
+}
+
+function sanitizeBoardTable(table) {
+  const rawOrder = Array.isArray(table?.columnOrder) ? table.columnOrder : [];
+  const seen = new Set();
+  const cleaned = [];
+  for (const column of rawOrder) {
+    const id = asText(column);
+    if (!TABLE_COLUMNS.includes(id) || seen.has(id)) continue;
+    seen.add(id);
+    cleaned.push(id);
+  }
+  for (const required of TABLE_COLUMNS) {
+    if (!seen.has(required)) cleaned.push(required);
+  }
+  const sortBy = TABLE_COLUMNS.includes(asText(table?.sortBy)) ? asText(table.sortBy) : '';
+  const sortDir = asText(table?.sortDir).toLowerCase() === 'desc' ? 'desc' : 'asc';
+  return {
+    columnOrder: cleaned,
+    sortBy,
+    sortDir,
   };
 }
 
@@ -559,6 +583,7 @@ app.get('/api/llm/health', async (req, res) => {
 app.post('/api/llm/analyze/:projectKey', async (req, res) => {
   const { projectKey } = req.params;
   const lang = req.query.lang || 'en';
+  const model = asText(req.body?.model);
   try {
     const client = getClient();
     if (!cache.issues[projectKey] || cache.issues[projectKey].length === 0) {
@@ -570,7 +595,7 @@ app.post('/api/llm/analyze/:projectKey', async (req, res) => {
       return res.status(400).json({ error: 'No issues available for analysis.' });
     }
     const prompt = buildAnalysisPrompt(issues, lang);
-    const raw = await chat(prompt);
+    const raw = await chat(prompt, { model });
     let parsed;
     try {
       parsed = JSON.parse(raw);
@@ -584,11 +609,11 @@ app.post('/api/llm/analyze/:projectKey', async (req, res) => {
 });
 
 app.post('/api/llm/evaluate-idea', async (req, res) => {
-  const { idea, lang = 'en' } = req.body;
+  const { idea, lang = 'en', model } = req.body;
   if (!idea) return res.status(400).json({ error: 'idea required' });
   try {
     const prompt = buildIdeaEvalPrompt(idea, lang);
-    const raw = await chat(prompt);
+    const raw = await chat(prompt, { model: asText(model) });
     let parsed;
     try {
       parsed = JSON.parse(raw);
@@ -637,13 +662,13 @@ function normalizeRefinementSuggestion(parsed) {
 }
 
 app.post('/api/llm/refine-ticket', async (req, res) => {
-  const { ticket, availableComponents = [], objectiveCandidates = [], lang = 'en' } = req.body || {};
+  const { ticket, availableComponents = [], objectiveCandidates = [], lang = 'en', model } = req.body || {};
   if (!ticket || typeof ticket !== 'object') {
     return res.status(400).json({ error: 'ticket object required' });
   }
   try {
     const prompt = buildRefinementPrompt({ ticket, availableComponents, objectiveCandidates, lang });
-    const raw = await chat(prompt);
+    const raw = await chat(prompt, { model: asText(model) });
     let parsed;
     try {
       parsed = JSON.parse(raw);
@@ -695,6 +720,7 @@ module.exports = {
   sanitizeBoardState,
   sanitizePlanningState,
   sanitizeBoardChecklists,
+  sanitizeBoardTable,
   normalizeAnalysis,
   normalizeRefinementSuggestion,
   isRetryable,

@@ -2,6 +2,8 @@
 
 Draggable dashboard for Geo IT product and delivery work. Connects to Jira Data Center and a local Ollama LLM.
 
+By default the app aims for a larger Ollama model (`qwen3:14b`) and still lets you switch to smaller discovered local models in the UI.
+
 ## Workflow modes
 
 - **Refinement**: identify under-specified backlog items, enrich them with local AI, review acceptance criteria, assign products/components, and inspect likely objective matches from the modernization board.

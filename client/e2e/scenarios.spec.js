@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { setupMocks } from './helpers.js';
 
+function projectSelect(page) {
+  return page.locator('.toolbar select.input').first();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Szenario 1: App lädt – alle Services offline
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,8 +19,8 @@ test('Szenario 1: App lädt – Services offline', async ({ page }) => {
   await expect(page.getByText('Jira offline')).toBeVisible();
 
   // Select-Dropdown soll vorhanden und leer sein
-  await expect(page.locator('.toolbar select.input')).toBeVisible();
-  await expect(page.locator('.toolbar select.input')).toHaveValue('');
+  await expect(projectSelect(page)).toBeVisible();
+  await expect(projectSelect(page)).toHaveValue('');
 
   await page.screenshot({ path: 'e2e/screenshots/01_app_offline.png', fullPage: true });
 });
@@ -31,11 +35,13 @@ test('Szenario 2: Projekt auswählen und Tickets laden', async ({ page }) => {
   // Warte auf Jira-Status
   await expect(page.getByText('Jira connected')).toBeVisible();
   await expect(page.getByText('LLM online')).toBeVisible();
+  await expect(page.locator('.toolbar-right select.input')).toHaveValue('qwen3:14b');
+  await expect(page.getByText('· qwen3:14b')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/02a_app_online.png', fullPage: true });
 
   // Projekt auswählen
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
   await expect(page.locator('.sprint-section-title', { hasText: 'Sprint backlog' }).first()).toBeVisible();
@@ -78,9 +84,10 @@ test('Szenario 2: Projekt auswählen und Tickets laden', async ({ page }) => {
 // Szenario 3: LLM Insights – Analyse starten
 // ─────────────────────────────────────────────────────────────────────────────
 test('Szenario 3: LLM-Analyse starten', async ({ page }) => {
-  await setupMocks(page);
+  const captures = {};
+  await setupMocks(page, { captures });
   await page.goto('/');
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
   // Analyse-Button klicken
@@ -103,6 +110,7 @@ test('Szenario 3: LLM-Analyse starten', async ({ page }) => {
   await page.getByText('Gaps').click();
   await page.waitForTimeout(250);
   await expect(page.getByText('No ticket for automated testing coverage.')).toBeVisible();
+  expect(captures.analyze.model).toBe('qwen3:14b');
 
   await page.screenshot({ path: 'e2e/screenshots/03b_gaps_section.png', fullPage: true });
 });
@@ -111,9 +119,12 @@ test('Szenario 3: LLM-Analyse starten', async ({ page }) => {
 // Szenario 4: Idea Evaluator – Idee bewerten
 // ─────────────────────────────────────────────────────────────────────────────
 test('Szenario 4: Idee bewerten', async ({ page }) => {
-  await setupMocks(page);
+  const captures = {};
+  await setupMocks(page, { captures });
   await page.goto('/');
   await page.waitForTimeout(500);
+
+  await page.locator('.toolbar-right select.input').selectOption('qwen3:4b');
 
   const textarea = page.locator('.idea-textarea');
   await textarea.fill('Build an AI-powered ticket triage system that auto-assigns priorities');
@@ -136,6 +147,7 @@ test('Szenario 4: Idee bewerten', async ({ page }) => {
   // Risks & Next Steps
   await expect(page.getByText('Risks')).toBeVisible();
   await expect(page.getByText('Next steps')).toBeVisible();
+  expect(captures.evaluateIdea.model).toBe('qwen3:4b');
 
   await page.screenshot({ path: 'e2e/screenshots/04b_idea_result.png', fullPage: true });
 });
@@ -146,7 +158,7 @@ test('Szenario 4: Idee bewerten', async ({ page }) => {
 test('Szenario 5: Roadmap Timeline anzeigen', async ({ page }) => {
   await setupMocks(page);
   await page.goto('/');
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(500);
 
   const roadmap = page.locator('.roadmap-timeline');
@@ -169,7 +181,7 @@ test('Szenario 6: JiraSync – Ticket synchronisieren', async ({ page }) => {
   await page.goto('/');
 
   // Projekt auswählen (Sync-Button braucht ein Projekt)
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(300);
 
   await expect(page.locator('.js-form-grid')).toBeVisible();
@@ -206,7 +218,7 @@ test('Szenario 7: Sprache umschalten (EN → DE)', async ({ page }) => {
   // Englische Texte sollen sichtbar sein
   await expect(page.getByText('Geo IT delivery cockpit for agile Jira teams')).toBeVisible();
   // "Select project…" ist ein <option> inside der select – prüfe den select-Value
-  await expect(page.locator('.toolbar select.input')).toHaveValue('');
+  await expect(projectSelect(page)).toHaveValue('');
 
   await page.screenshot({ path: 'e2e/screenshots/07a_lang_en.png', fullPage: true });
 
@@ -216,7 +228,7 @@ test('Szenario 7: Sprache umschalten (EN → DE)', async ({ page }) => {
 
   // Deutsche Texte sollen erscheinen
   await expect(page.getByText('Geo-IT-Liefercockpit fuer agile Jira-Teams')).toBeVisible();
-  await expect(page.locator('.toolbar select.input')).toHaveValue('');
+  await expect(projectSelect(page)).toHaveValue('');
   await expect(page.getByText('KI-Analyse')).toBeVisible();
   await expect(page.getByText('Ideen-Bewertung')).toBeVisible();
 
@@ -256,7 +268,7 @@ test('Szenario 8: Widget maximieren und minimieren', async ({ page }) => {
 test('Szenario 9: Ticketdetails anzeigen', async ({ page }) => {
   await setupMocks(page);
   await page.goto('/');
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
   await page.locator('.ticket-table-row', { hasText: 'Implement login flow' }).click();
@@ -290,7 +302,7 @@ test('Szenario 9: Ticketdetails anzeigen', async ({ page }) => {
 test('Szenario 12: Arbeitsmodi und Scrum Guide', async ({ page }) => {
   await setupMocks(page);
   await page.goto('/');
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
   await page.getByRole('button', { name: 'Planning' }).click();
@@ -326,9 +338,10 @@ test('Szenario 12: Arbeitsmodi und Scrum Guide', async ({ page }) => {
 // Szenario 13: Refinement mit lokaler KI
 // ─────────────────────────────────────────────────────────────────────────────
 test('Szenario 13: Refinement mit lokaler KI', async ({ page }) => {
-  await setupMocks(page);
+  const captures = {};
+  await setupMocks(page, { captures });
   await page.goto('/');
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
   await page.getByRole('button', { name: 'Refinement' }).click();
@@ -342,6 +355,7 @@ test('Szenario 13: Refinement mit lokaler KI', async ({ page }) => {
   await expect(refinementEditor.locator('.workflow-textarea--lg')).toHaveValue(/Provide OAuth2 login/);
   await expect(refinementEditor.locator('.workflow-textarea').nth(1)).toHaveValue(/OAuth2 login succeeds for valid users\./);
   await expect(page.getByText('Do we need migration support for existing sessions?')).toBeVisible();
+  expect(captures.refineTicket.model).toBe('qwen3:14b');
 
   await page.getByRole('button', { name: 'Apply to Jira' }).click();
   await expect(page.getByText('Refinement applied to Jira.')).toBeVisible();
@@ -382,7 +396,7 @@ test('Szenario 10: Persistierte Board-Ansicht laden', async ({ page }) => {
     },
   });
   await page.goto('/');
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
   const sprintBacklog = page.locator('.sprint-section').first();
@@ -401,7 +415,7 @@ test('Szenario 10: Persistierte Board-Ansicht laden', async ({ page }) => {
 test('Szenario 11: Drag and Drop Persistenz', async ({ page }) => {
   await setupMocks(page);
   await page.goto('/');
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
   const ticketRow = page.locator('.ticket-table-row', { hasText: 'Fix dashboard crash on mobile' });
@@ -427,7 +441,7 @@ test('Szenario 11: Drag and Drop Persistenz', async ({ page }) => {
   await expect(futureSprint.getByText('Fix dashboard crash on mobile')).toBeVisible();
 
   await page.reload();
-  await page.locator('.toolbar select.input').selectOption('AXON');
+  await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
   const futureSprintAfterReload = page.locator('.sprint-section').filter({ hasText: 'Sprint 25' });
@@ -485,4 +499,64 @@ test('Szenario 14: Middle-Mouse-Panning scrollt Widget-Inhalte', async ({ page }
   });
 
   expect(after.after).toBeGreaterThan(after.before);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 15: Tabellenspalten sortieren und verschieben persistiert
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 15: Tabellen-Spalten sortierbar und verschiebbar', async ({ page }) => {
+  await setupMocks(page, {
+    boardState: {
+      placements: {
+        'AXON-1': 'backlog',
+        'AXON-2': 'backlog',
+        'AXON-3': 'backlog',
+      },
+    },
+  });
+
+  await page.goto('/');
+  await projectSelect(page).selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  const backlog = page.locator('.sprint-section').filter({
+    has: page.locator('.sprint-section-title', { hasText: /^Backlog$/ }),
+  });
+  await expect(backlog).toBeVisible();
+
+  const pointsHeader = backlog.locator('.ticket-table-header-btn').filter({ hasText: /^Points/ }).first();
+  await pointsHeader.click();
+  await pointsHeader.click();
+
+  await expect(backlog.locator('.ticket-table-row').first().locator('.ticket-key')).toHaveText('AXON-3');
+
+  await page.evaluate(() => {
+    const backlogSection = Array.from(document.querySelectorAll('.sprint-section'))
+      .find((element) => {
+        const title = element.querySelector('.sprint-section-title');
+        return title?.textContent?.trim() === 'Backlog';
+      });
+    if (!backlogSection) throw new Error('Backlog section not found');
+    const headers = backlogSection.querySelectorAll('.ticket-table-header-btn');
+    const points = Array.from(headers).find((element) => element.textContent?.trim().startsWith('Points'));
+    const ticket = Array.from(headers).find((element) => element.textContent?.trim().startsWith('Ticket'));
+    if (!points || !ticket) throw new Error('Points or Ticket header not found');
+    const dataTransfer = new DataTransfer();
+    points.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }));
+    ticket.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
+    ticket.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+  });
+
+  await page.waitForTimeout(200);
+  await expect(backlog.locator('.ticket-table-header-btn').first()).toContainText('Points');
+
+  await page.reload();
+  await projectSelect(page).selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  const backlogAfterReload = page.locator('.sprint-section').filter({
+    has: page.locator('.sprint-section-title', { hasText: /^Backlog$/ }),
+  });
+  await expect(backlogAfterReload.locator('.ticket-table-header-btn').first()).toContainText('Points');
+  await expect(backlogAfterReload.locator('.ticket-table-row').first().locator('.ticket-key')).toHaveText('AXON-3');
 });

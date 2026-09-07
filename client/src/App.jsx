@@ -13,6 +13,8 @@ import JiraSync from './components/JiraSync';
 import ScrumGuideModal from './components/ScrumGuideModal';
 import MiddleScrollArea from './components/MiddleScrollArea';
 
+const LLM_MODEL_STORAGE_KEY = 'ticketanalyzer.llmModel';
+
 function Widget({ title, children, className = '' }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -47,15 +49,39 @@ export default function App() {
   const [jiraOk, setJiraOk] = useState(false);
   const [jiraBaseUrl, setJiraBaseUrl] = useState('');
 
-  const [llm, setLlm] = useState({ online: false, models: [] });
+  const [llm, setLlm] = useState({ online: false, models: [], defaultModel: '', recommendedModel: '' });
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(LLM_MODEL_STORAGE_KEY) || '');
 
   // Poll LLM health every 15s
   useEffect(() => {
-    const check = () => api.llmHealth().then(setLlm).catch(() => setLlm({ online: false, models: [] }));
+    const check = () => api.llmHealth().then(setLlm).catch(() => setLlm({ online: false, models: [], defaultModel: '', recommendedModel: '' }));
     check();
     const iv = setInterval(check, 15000);
     return () => clearInterval(iv);
   }, []);
+
+  useEffect(() => {
+    if (selectedModel) {
+      localStorage.setItem(LLM_MODEL_STORAGE_KEY, selectedModel);
+    }
+  }, [selectedModel]);
+
+  useEffect(() => {
+    const availableModels = llm.models || [];
+    const savedModel = localStorage.getItem(LLM_MODEL_STORAGE_KEY) || '';
+    const currentValid = selectedModel && availableModels.includes(selectedModel);
+    if (currentValid) return;
+
+    if (savedModel && availableModels.includes(savedModel)) {
+      setSelectedModel(savedModel);
+      return;
+    }
+
+    const recommended = llm.recommendedModel || llm.defaultModel || availableModels[0] || '';
+    if (recommended && recommended !== selectedModel) {
+      setSelectedModel(recommended);
+    }
+  }, [llm.defaultModel, llm.models, llm.recommendedModel, selectedModel]);
 
   // Load projects on mount
   useEffect(() => {
@@ -115,6 +141,7 @@ export default function App() {
     <div className="app">
       <StatusBar
         llm={llm}
+        selectedModel={selectedModel}
         jiraOk={jiraOk}
         projectCount={projects.length}
         issueCount={issues.length}
@@ -168,6 +195,28 @@ export default function App() {
         </div>
 
         <div className="toolbar-right">
+          <select
+            className="input"
+            value={selectedModel}
+            onChange={(event) => setSelectedModel(event.target.value)}
+            disabled={!llm.online || (llm.models || []).length === 0}
+            title={t.model}
+            style={{ minWidth: 200 }}
+          >
+            {(() => {
+              const options = llm.models || [];
+              if (options.length === 0) {
+                const fallback = llm.recommendedModel || llm.defaultModel || '';
+                return <option value={fallback}>{fallback || t.loading}</option>;
+              }
+              return options.map((modelName) => (
+                <option key={modelName} value={modelName}>
+                  {modelName}{modelName === llm.recommendedModel ? ` · ${t.recommended}` : ''}
+                </option>
+              ));
+            })()}
+          </select>
+
           <button
             className="btn-icon"
             onClick={() => setShowScrumGuide(true)}
@@ -204,11 +253,12 @@ export default function App() {
               workflowMode={workflowMode}
               lang={lang}
               onRefresh={doRefresh}
+              llmModel={selectedModel}
             />
           </Widget>
 
           <Widget key="widget-idea" title={t.ideaEval}>
-            <IdeaEvaluator t={t} lang={lang} />
+            <IdeaEvaluator t={t} lang={lang} llmModel={selectedModel} />
           </Widget>
 
           <Widget key="widget-jirasync" title={t.syncStart}>
@@ -220,7 +270,7 @@ export default function App() {
           </Widget>
 
           <Widget key="widget-insights" title={t.insights}>
-            <LLMInsights projectKey={selectedProject} issueCount={issues.length} t={t} lang={lang} jiraBaseUrl={jiraBaseUrl} />
+            <LLMInsights projectKey={selectedProject} issueCount={issues.length} t={t} lang={lang} jiraBaseUrl={jiraBaseUrl} llmModel={selectedModel} />
           </Widget>
         </AnimatePresence>
       </div>
