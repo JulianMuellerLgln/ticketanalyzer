@@ -259,10 +259,6 @@ export default function App() {
             />
           </Widget>
 
-          <Widget key="widget-idea" title={t.ideaEval}>
-            <IdeaEvaluator t={t} lang={lang} llmModel={selectedModel} />
-          </Widget>
-
           <Widget key="widget-jirasync" title={t.syncStart}>
             <JiraSync projectKey={selectedProject} t={t} jiraBaseUrl={jiraBaseUrl} />
           </Widget>
@@ -273,6 +269,10 @@ export default function App() {
 
           <Widget key="widget-insights" title={t.insights}>
             <LLMInsights projectKey={selectedProject} issueCount={issues.length} t={t} lang={lang} jiraBaseUrl={jiraBaseUrl} llmModel={selectedModel} />
+          </Widget>
+
+          <Widget key="widget-idea" title={t.ideaEval}>
+            <IdeaEvaluator t={t} lang={lang} llmModel={selectedModel} />
           </Widget>
         </AnimatePresence>
       </div>

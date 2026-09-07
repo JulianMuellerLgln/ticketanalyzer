@@ -47,7 +47,7 @@ html, body {
 .app-topbar {
   position: sticky;
   top: 0;
-  z-index: 1200;
+  z-index: 12000;
   background: var(--bg2);
 }
 
@@ -201,7 +201,7 @@ html, body {
 
 .widget--expanded {
   position: fixed !important;
-  inset: 48px 16px 16px 16px;
+  inset: 96px 16px 16px 16px;
   width: auto !important;
   transform: none !important;
   z-index: 9999 !important;
