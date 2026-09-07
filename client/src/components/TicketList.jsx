@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Save, Search, Sparkles, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Save, Search, Sparkles, X } from 'lucide-react';
 import { api } from '../api';
 import TicketLink from './TicketLink';
 import MiddleScrollArea from './MiddleScrollArea';
@@ -632,25 +632,109 @@ function ChecklistEditor({ title, items, progressLabelText, sectionKey, values, 
   );
 }
 
-function TeamStandardsPanel({ t }) {
+function CollapsibleDefinition({ title, open, onToggle, children }) {
   return (
-    <div className="workflow-panel">
-      <div className="workflow-panel-header">
-        <div>
-          <div className="workflow-panel-title">{t.teamStandardsTitle}</div>
-          <div className="workflow-panel-subtitle">{t.teamStandardsSubtitle}</div>
-        </div>
-      </div>
-
-      <div className="definition-grid">
-        <DefinitionChecklist title={t.definitionOfReadyTitle} items={t.definitionOfReadyItems} />
-        <DefinitionChecklist title={t.definitionOfDoneTitle} items={t.definitionOfDoneItems} />
-      </div>
+    <div className="definition-card">
+      <button type="button" className="definition-toggle" onClick={onToggle}>
+        <span className="definition-toggle-icon">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
+        <span className="workflow-section-title">{title}</span>
+      </button>
+      {open && children}
     </div>
   );
 }
 
-function TicketChecklistTool({ ticket, t, checklistState, objectiveMatch, onToggle }) {
+function TeamStandardsSidebar({
+  t,
+  tickets,
+  selectedChecklistTicketKey,
+  onSelectChecklistTicket,
+  checklistStates,
+  objectiveMatches,
+  onToggleChecklist,
+}) {
+  const [openState, setOpenState] = useState({
+    readyDefinition: false,
+    doneDefinition: false,
+    ticketChecklist: true,
+  });
+
+  const ticket = tickets.find((entry) => entry.key === selectedChecklistTicketKey) || null;
+  const objectiveMatch = ticket ? (objectiveMatches[ticket.key] || null) : null;
+
+  return (
+    <aside className="workflow-sidebar">
+      <div className="workflow-panel">
+        <div className="workflow-panel-header">
+          <div>
+            <div className="workflow-panel-title">{t.teamStandardsTitle}</div>
+            <div className="workflow-panel-subtitle">{t.teamStandardsSubtitle}</div>
+          </div>
+        </div>
+
+        <CollapsibleDefinition
+          title={t.definitionOfReadyTitle}
+          open={openState.readyDefinition}
+          onToggle={() => setOpenState((previous) => ({ ...previous, readyDefinition: !previous.readyDefinition }))}
+        >
+          <ul className="definition-list">
+            {t.definitionOfReadyItems.map((item) => (
+              <li key={`sidebar-ready-${item}`}>{item}</li>
+            ))}
+          </ul>
+        </CollapsibleDefinition>
+
+        <CollapsibleDefinition
+          title={t.definitionOfDoneTitle}
+          open={openState.doneDefinition}
+          onToggle={() => setOpenState((previous) => ({ ...previous, doneDefinition: !previous.doneDefinition }))}
+        >
+          <ul className="definition-list">
+            {t.definitionOfDoneItems.map((item) => (
+              <li key={`sidebar-done-${item}`}>{item}</li>
+            ))}
+          </ul>
+        </CollapsibleDefinition>
+
+        <CollapsibleDefinition
+          title={t.ticketChecklistTitle}
+          open={openState.ticketChecklist}
+          onToggle={() => setOpenState((previous) => ({ ...previous, ticketChecklist: !previous.ticketChecklist }))}
+        >
+          <div className="ticket-checklist-sidebar-content">
+            <select
+              className="input"
+              value={selectedChecklistTicketKey}
+              onChange={(event) => onSelectChecklistTicket(event.target.value)}
+            >
+              <option value="">{t.selectTicketForChecklist}</option>
+              {tickets.map((entry) => (
+                <option key={`checklist-ticket-${entry.key}`} value={entry.key}>
+                  {entry.key} — {entry.fields.summary}
+                </option>
+              ))}
+            </select>
+
+            {ticket ? (
+              <TicketChecklistTool
+                ticket={ticket}
+                t={t}
+                checklistState={checklistStates[ticket.key] || null}
+                objectiveMatch={objectiveMatch}
+                onToggle={(sectionKey, itemKey, checked) => onToggleChecklist(ticket.key, sectionKey, itemKey, checked)}
+                embedded
+              />
+            ) : (
+              <div className="muted">{t.selectTicketForChecklist}</div>
+            )}
+          </div>
+        </CollapsibleDefinition>
+      </div>
+    </aside>
+  );
+}
+
+function TicketChecklistTool({ ticket, t, checklistState, objectiveMatch, onToggle, embedded = false }) {
   const defaultState = getDefaultChecklistState(ticket, objectiveMatch);
   const effectiveReady = Object.fromEntries(
     READY_CHECK_KEYS.map((key) => [key, key in (checklistState?.ready || {}) ? checklistState.ready[key] : defaultState.ready[key]])
@@ -663,7 +747,7 @@ function TicketChecklistTool({ ticket, t, checklistState, objectiveMatch, onTogg
   const doneItems = DONE_CHECK_KEYS.map((key) => [key, t.doneChecklistItems[key]]);
 
   return (
-    <div className="workflow-panel">
+    <div className={`workflow-panel${embedded ? ' workflow-panel--embedded' : ''}`}>
       <div className="workflow-panel-header">
         <div>
           <div className="workflow-panel-title">{t.checklistToolTitle}</div>
@@ -1317,6 +1401,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
   const [persistError, setPersistError] = useState('');
   const [projectContextError, setProjectContextError] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [selectedChecklistTicketKey, setSelectedChecklistTicketKey] = useState('');
   const [refinementDraft, setRefinementDraft] = useState(createRefinementDraft(null));
   const [aiRefinement, setAiRefinement] = useState(DEFAULT_AI_STATE);
   const [dailyAdvice, setDailyAdvice] = useState(DEFAULT_DAILY_ADVICE_STATE);
@@ -1350,6 +1435,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         setPersistError('');
         setPersistReady(false);
         setSelectedTicket(null);
+        setSelectedChecklistTicketKey('');
         setDailyAdvice(DEFAULT_DAILY_ADVICE_STATE);
         return;
       }
@@ -1434,6 +1520,11 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
   useEffect(() => {
     setPlacements((previous) => mergePlacements(previous, tickets));
   }, [tickets]);
+
+  useEffect(() => {
+    if (selectedChecklistTicketKey && tickets.some((ticket) => ticket.key === selectedChecklistTicketKey)) return;
+    setSelectedChecklistTicketKey(tickets[0]?.key || '');
+  }, [selectedChecklistTicketKey, tickets]);
 
   useEffect(() => {
     setDailyAdvice(DEFAULT_DAILY_ADVICE_STATE);
@@ -1566,6 +1657,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
 
   function openTicket(ticket) {
     setSelectedTicket(ticket);
+    setSelectedChecklistTicketKey(ticket.key);
     setRefinementDraft(createRefinementDraft(ticket));
     setAiRefinement(DEFAULT_AI_STATE);
   }
@@ -1608,14 +1700,14 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     });
   }
 
-  function toggleChecklist(sectionKey, itemKey, checked) {
-    if (!selectedTicket?.key) return;
+  function toggleChecklist(ticketKey, sectionKey, itemKey, checked) {
+    if (!ticketKey) return;
     setChecklists((previous) => ({
       ...previous,
-      [selectedTicket.key]: {
-        ...(previous[selectedTicket.key] || {}),
+      [ticketKey]: {
+        ...(previous[ticketKey] || {}),
         [sectionKey]: {
-          ...(previous[selectedTicket.key]?.[sectionKey] || {}),
+          ...(previous[ticketKey]?.[sectionKey] || {}),
           [itemKey]: checked,
         },
       },
@@ -1811,196 +1903,208 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
 
   return (
     <div className="ticketlist sprint-board">
-      <div className="tl-search">
-        <Search size={12} style={{ marginRight: 6, opacity: 0.5 }} />
-        <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.search} />
-        <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>{visibleTicketCount}</span>
-        {workflowMode === 'daily' && (
-          <button className="btn-icon" onClick={() => setShowArchive((value) => !value)}>
-            {showArchive ? t.hideArchive : t.showArchive}
-          </button>
-        )}
-      </div>
+      <div className="sprint-board-layout">
+          <div className="sprint-board-main">
+            <div className="tl-search">
+              <Search size={12} style={{ marginRight: 6, opacity: 0.5 }} />
+              <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.search} />
+              <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>{visibleTicketCount}</span>
+              {workflowMode === 'daily' && (
+                <button className="btn-icon" onClick={() => setShowArchive((value) => !value)}>
+                  {showArchive ? t.hideArchive : t.showArchive}
+                </button>
+              )}
+            </div>
 
-      {persistError && <div className="error-text">{persistError}</div>}
-      {projectContextError && workflowMode === 'refinement' && <div className="error-text">{projectContextError}</div>}
+            {persistError && <div className="error-text">{persistError}</div>}
+            {projectContextError && workflowMode === 'refinement' && <div className="error-text">{projectContextError}</div>}
 
-      {workflowMode === 'refinement' && (
-        <RefinementPanel
-          candidates={refinementCandidates}
-          objectiveBoardName={objectiveContext.board?.name}
-          objectiveCoverage={`${Object.keys(objectiveMatches).length}/${tickets.length || 0}`}
-          missingProductCount={tickets.filter((ticket) => !primaryComponentName(ticket) && !ticket.done).length}
-          t={t}
-          onOpenTicket={openTicket}
-          onGenerateRefinement={generateRefinement}
-        />
-      )}
+            {workflowMode === 'refinement' && (
+              <RefinementPanel
+                candidates={refinementCandidates}
+                objectiveBoardName={objectiveContext.board?.name}
+                objectiveCoverage={`${Object.keys(objectiveMatches).length}/${tickets.length || 0}`}
+                missingProductCount={tickets.filter((ticket) => !primaryComponentName(ticket) && !ticket.done).length}
+                t={t}
+                onOpenTicket={openTicket}
+                onGenerateRefinement={generateRefinement}
+              />
+            )}
 
-      {workflowMode === 'planning' && (
-        <PlanningPanel
-          t={t}
-          planning={planning}
-          onPlanningChange={onPlanningChange}
-          onSaveSprintGoal={saveSprintGoal}
-          planningMessage={planningMessage}
-          planningTargetSprint={planningTargetSprint}
-          baselineLoad={baselineLoad}
-          backlogPoints={backlogPoints}
-          targetSprintPoints={planningTargetSprintPoints}
-        />
-      )}
+            {workflowMode === 'planning' && (
+              <PlanningPanel
+                t={t}
+                planning={planning}
+                onPlanningChange={onPlanningChange}
+                onSaveSprintGoal={saveSprintGoal}
+                planningMessage={planningMessage}
+                planningTargetSprint={planningTargetSprint}
+                baselineLoad={baselineLoad}
+                backlogPoints={backlogPoints}
+                targetSprintPoints={planningTargetSprintPoints}
+              />
+            )}
 
-      {workflowMode === 'daily' && (
-        <DailyPanel
-          t={t}
-          activeSprint={activeSprint}
-          remainingDays={daysRemaining(activeSprint?.endDate)}
-          planning={planning}
-          dailyAdvice={dailyAdvice}
-          onGenerateDailyAdvice={generateDailyAdvice}
-          hasProject={Boolean(projectKey)}
-          baselineLoad={baselineLoad}
-          activeSprintPoints={activeSprintPoints}
-          backlogPoints={backlogPoints}
-        />
-      )}
+            {workflowMode === 'daily' && (
+              <DailyPanel
+                t={t}
+                activeSprint={activeSprint}
+                remainingDays={daysRemaining(activeSprint?.endDate)}
+                planning={planning}
+                dailyAdvice={dailyAdvice}
+                onGenerateDailyAdvice={generateDailyAdvice}
+                hasProject={Boolean(projectKey)}
+                baselineLoad={baselineLoad}
+                activeSprintPoints={activeSprintPoints}
+                backlogPoints={backlogPoints}
+              />
+            )}
 
-      <TeamStandardsPanel t={t} />
-
-      <div className="sprint-summary-card">
-        <div className="sprint-summary-meta">
-          <div className="sprint-summary-title">{activeSprint ? activeSprint.name : t.noActiveSprint}</div>
-          <div className="sprint-summary-line">{currentSprintSubtitle}</div>
-          <div className="workflow-meta-row">
-            <span className="workflow-chip">{t.teamBaselineLoad}: {baselineLoad}</span>
-            <span className="workflow-chip">{t.backlogLoad}: {backlogPoints}</span>
-            <span className="workflow-chip">{t.sprintLoad}: {activeSprintPoints}</span>
-          </div>
-        </div>
-        <button className="btn-primary" onClick={activeSprint ? endSprint : startSprint}>
-          {activeSprint ? t.endSprint : t.startSprint}
-        </button>
-      </div>
-
-      <div className="sprint-sections">
-        <Section
-          title={activeSprint ? `${t.sprintBacklog}: ${activeSprint.name}` : t.sprintBacklog}
-          subtitle={activeSprint ? currentSprintSubtitle : t.startSprintHint}
-          count={activeSprint ? (ticketsByLane[`sprint:${activeSprint.id}`] || []).length : 0}
-          points={activeSprint ? lanePoints[`sprint:${activeSprint.id}`] || 0 : 0}
-          laneId={activeSprint ? `sprint:${activeSprint.id}` : ''}
-          tickets={activeSprint ? ticketsByLane[`sprint:${activeSprint.id}`] || [] : []}
-          t={t}
-          onDropTicket={onDropTicket}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          onDragEnterLane={setDropTargetLane}
-          onOpenTicket={openTicket}
-          dropTargetLane={dropTargetLane}
-          objectiveMatches={objectiveMatches}
-          checklistStates={checklists}
-          columns={tableState.columnOrder}
-          sortBy={tableState.sortBy}
-          sortDir={tableState.sortDir}
-          onSort={onSort}
-          onReorderColumn={onReorderColumn}
-          allowDrop={Boolean(activeSprint)}
-        />
-
-        <Section
-          title={t.backlog}
-          subtitle={workflowMode === 'planning' ? t.planningSubtitle : t.backlogHint}
-          count={(ticketsByLane.backlog || []).length}
-          points={lanePoints.backlog || 0}
-          laneId="backlog"
-          tickets={ticketsByLane.backlog || []}
-          t={t}
-          onDropTicket={onDropTicket}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          onDragEnterLane={setDropTargetLane}
-          onOpenTicket={openTicket}
-          dropTargetLane={dropTargetLane}
-          objectiveMatches={objectiveMatches}
-          checklistStates={checklists}
-          columns={tableState.columnOrder}
-          sortBy={tableState.sortBy}
-          sortDir={tableState.sortDir}
-          onSort={onSort}
-          onReorderColumn={onReorderColumn}
-          allowDrop
-        />
-
-        {futureSprints.length === 0 ? (
-          <div className="sprint-section">
-            <div className="sprint-section-header">
-              <div>
-                <div className="sprint-section-title">{t.futureSprints}</div>
-                <div className="sprint-section-subtitle">{t.noFutureSprints}</div>
+            <div className="sprint-summary-card">
+              <div className="sprint-summary-meta">
+                <div className="sprint-summary-title">{activeSprint ? activeSprint.name : t.noActiveSprint}</div>
+                <div className="sprint-summary-line">{currentSprintSubtitle}</div>
+                <div className="workflow-meta-row">
+                  <span className="workflow-chip">{t.teamBaselineLoad}: {baselineLoad}</span>
+                  <span className="workflow-chip">{t.backlogLoad}: {backlogPoints}</span>
+                  <span className="workflow-chip">{t.sprintLoad}: {activeSprintPoints}</span>
+                </div>
               </div>
-              <span className="sprint-section-count">0</span>
+              <button className="btn-primary" onClick={activeSprint ? endSprint : startSprint}>
+                {activeSprint ? t.endSprint : t.startSprint}
+              </button>
+            </div>
+
+            <div className="sprint-sections">
+              <Section
+                title={activeSprint ? `${t.sprintBacklog}: ${activeSprint.name}` : t.sprintBacklog}
+                subtitle={activeSprint ? currentSprintSubtitle : t.startSprintHint}
+                count={activeSprint ? (ticketsByLane[`sprint:${activeSprint.id}`] || []).length : 0}
+                points={activeSprint ? lanePoints[`sprint:${activeSprint.id}`] || 0 : 0}
+                laneId={activeSprint ? `sprint:${activeSprint.id}` : ''}
+                tickets={activeSprint ? ticketsByLane[`sprint:${activeSprint.id}`] || [] : []}
+                t={t}
+                onDropTicket={onDropTicket}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                onDragEnterLane={setDropTargetLane}
+                onOpenTicket={openTicket}
+                dropTargetLane={dropTargetLane}
+                objectiveMatches={objectiveMatches}
+                checklistStates={checklists}
+                columns={tableState.columnOrder}
+                sortBy={tableState.sortBy}
+                sortDir={tableState.sortDir}
+                onSort={onSort}
+                onReorderColumn={onReorderColumn}
+                allowDrop={Boolean(activeSprint)}
+              />
+
+              <Section
+                title={t.backlog}
+                subtitle={workflowMode === 'planning' ? t.planningSubtitle : t.backlogHint}
+                count={(ticketsByLane.backlog || []).length}
+                points={lanePoints.backlog || 0}
+                laneId="backlog"
+                tickets={ticketsByLane.backlog || []}
+                t={t}
+                onDropTicket={onDropTicket}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                onDragEnterLane={setDropTargetLane}
+                onOpenTicket={openTicket}
+                dropTargetLane={dropTargetLane}
+                objectiveMatches={objectiveMatches}
+                checklistStates={checklists}
+                columns={tableState.columnOrder}
+                sortBy={tableState.sortBy}
+                sortDir={tableState.sortDir}
+                onSort={onSort}
+                onReorderColumn={onReorderColumn}
+                allowDrop
+              />
+
+              {futureSprints.length === 0 ? (
+                <div className="sprint-section">
+                  <div className="sprint-section-header">
+                    <div>
+                      <div className="sprint-section-title">{t.futureSprints}</div>
+                      <div className="sprint-section-subtitle">{t.noFutureSprints}</div>
+                    </div>
+                    <span className="sprint-section-count">0</span>
+                  </div>
+                </div>
+              ) : (
+                futureSprints.map((sprint) => (
+                  <Section
+                    key={sprint.id}
+                    title={sprint.name}
+                    subtitle={[
+                      sprint.goal ? `${t.currentSprintGoal}: ${sprint.goal}` : '',
+                      sprint.startDate || sprint.endDate
+                        ? `${formatDateLabel(sprint.startDate)}${sprint.endDate ? ` - ${formatDateLabel(sprint.endDate)}` : ''}`
+                        : '',
+                    ].filter(Boolean).join(' · ') || t.futureSprintHint}
+                    count={(ticketsByLane[`sprint:${sprint.id}`] || []).length}
+                    points={lanePoints[`sprint:${sprint.id}`] || 0}
+                    laneId={`sprint:${sprint.id}`}
+                    tickets={ticketsByLane[`sprint:${sprint.id}`] || []}
+                    t={t}
+                    onDropTicket={onDropTicket}
+                    onDragStart={onDragStart}
+                    onDragEnd={onDragEnd}
+                    onDragEnterLane={setDropTargetLane}
+                    onOpenTicket={openTicket}
+                    dropTargetLane={dropTargetLane}
+                    objectiveMatches={objectiveMatches}
+                    checklistStates={checklists}
+                    columns={tableState.columnOrder}
+                    sortBy={tableState.sortBy}
+                    sortDir={tableState.sortDir}
+                    onSort={onSort}
+                    onReorderColumn={onReorderColumn}
+                    allowDrop
+                  />
+                ))
+              )}
+
+              {showArchive && workflowMode === 'daily' && (
+                <Section
+                  title={t.archive}
+                  subtitle={t.archiveHint}
+                  count={(ticketsByLane.archive || []).length}
+                  points={lanePoints.archive || 0}
+                  laneId="archive"
+                  tickets={ticketsByLane.archive || []}
+                  t={t}
+                  onDropTicket={onDropTicket}
+                  onDragStart={onDragStart}
+                  onDragEnd={onDragEnd}
+                  onDragEnterLane={setDropTargetLane}
+                  onOpenTicket={openTicket}
+                  dropTargetLane={dropTargetLane}
+                  objectiveMatches={objectiveMatches}
+                  checklistStates={checklists}
+                  columns={tableState.columnOrder}
+                  sortBy={tableState.sortBy}
+                  sortDir={tableState.sortDir}
+                  onSort={onSort}
+                  onReorderColumn={onReorderColumn}
+                  allowDrop
+                />
+              )}
             </div>
           </div>
-        ) : (
-          futureSprints.map((sprint) => (
-            <Section
-              key={sprint.id}
-              title={sprint.name}
-              subtitle={[
-                sprint.goal ? `${t.currentSprintGoal}: ${sprint.goal}` : '',
-                sprint.startDate || sprint.endDate
-                  ? `${formatDateLabel(sprint.startDate)}${sprint.endDate ? ` - ${formatDateLabel(sprint.endDate)}` : ''}`
-                  : '',
-              ].filter(Boolean).join(' · ') || t.futureSprintHint}
-              count={(ticketsByLane[`sprint:${sprint.id}`] || []).length}
-              points={lanePoints[`sprint:${sprint.id}`] || 0}
-              laneId={`sprint:${sprint.id}`}
-              tickets={ticketsByLane[`sprint:${sprint.id}`] || []}
-              t={t}
-              onDropTicket={onDropTicket}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-              onDragEnterLane={setDropTargetLane}
-              onOpenTicket={openTicket}
-              dropTargetLane={dropTargetLane}
-              objectiveMatches={objectiveMatches}
-              checklistStates={checklists}
-              columns={tableState.columnOrder}
-              sortBy={tableState.sortBy}
-              sortDir={tableState.sortDir}
-              onSort={onSort}
-              onReorderColumn={onReorderColumn}
-              allowDrop
-            />
-          ))
-        )}
 
-        {showArchive && workflowMode === 'daily' && (
-          <Section
-            title={t.archive}
-            subtitle={t.archiveHint}
-            count={(ticketsByLane.archive || []).length}
-            points={lanePoints.archive || 0}
-            laneId="archive"
-            tickets={ticketsByLane.archive || []}
+          <TeamStandardsSidebar
             t={t}
-            onDropTicket={onDropTicket}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-            onDragEnterLane={setDropTargetLane}
-            onOpenTicket={openTicket}
-            dropTargetLane={dropTargetLane}
-            objectiveMatches={objectiveMatches}
+            tickets={tickets.filter((ticket) => !ticket.done)}
+            selectedChecklistTicketKey={selectedChecklistTicketKey}
+            onSelectChecklistTicket={setSelectedChecklistTicketKey}
             checklistStates={checklists}
-            columns={tableState.columnOrder}
-            sortBy={tableState.sortBy}
-            sortDir={tableState.sortDir}
-            onSort={onSort}
-            onReorderColumn={onReorderColumn}
-            allowDrop
+            objectiveMatches={objectiveMatches}
+            onToggleChecklist={toggleChecklist}
           />
-        )}
       </div>
 
       <AnimatePresence>
@@ -2023,7 +2127,7 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
               onGenerateRefinement={generateRefinement}
               aiRefinement={aiRefinement}
               checklistState={checklists[selectedTicket.key] || null}
-              onToggleChecklist={toggleChecklist}
+              onToggleChecklist={(sectionKey, itemKey, checked) => toggleChecklist(selectedTicket.key, sectionKey, itemKey, checked)}
               onApplyRefinement={applyRefinement}
               onClose={() => setSelectedTicket(null)}
             />

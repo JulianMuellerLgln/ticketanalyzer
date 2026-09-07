@@ -248,6 +248,8 @@ export async function setupMocks(page, overrides = {}) {
   );
   await page.route('**/api/board-state/**', async (route) => {
     if (route.request().method() === 'PUT') {
+      const nextPayload = route.request().postDataJSON() || {};
+      captures.boardState = nextPayload;
       boardState = {
         placements: {},
         sprints: {},
@@ -258,7 +260,7 @@ export async function setupMocks(page, overrides = {}) {
           sortBy: '',
           sortDir: 'asc',
         },
-        ...(route.request().postDataJSON() || {}),
+        ...nextPayload,
       };
     }
     await route.fulfill({ json: boardState });

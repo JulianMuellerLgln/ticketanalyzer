@@ -309,8 +309,8 @@ test('Szenario 12: Arbeitsmodi und Scrum Guide', async ({ page }) => {
   await expect(page.getByText('Planning focus')).toBeVisible();
   await expect(page.getByText('Sprint goal draft')).toBeVisible();
   await expect(page.getByText('Definition of Ready / Done')).toBeVisible();
-  await expect(page.getByText('Definition of Ready', { exact: true })).toBeVisible();
-  await expect(page.getByText('Definition of Done', { exact: true })).toBeVisible();
+  await expect(page.locator('.workflow-sidebar').getByRole('button', { name: 'Definition of Ready' })).toBeVisible();
+  await expect(page.locator('.workflow-sidebar').getByRole('button', { name: 'Definition of Done' })).toBeVisible();
   await expect(page.getByText('Typical team load', { exact: true })).toBeVisible();
 
   const goalDraft = page.locator('.workflow-textarea').first();
@@ -559,4 +559,30 @@ test('Szenario 15: Tabellen-Spalten sortierbar und verschiebbar', async ({ page 
   });
   await expect(backlogAfterReload.locator('.ticket-table-header-btn').first()).toContainText('Points');
   await expect(backlogAfterReload.locator('.ticket-table-row').first().locator('.ticket-key')).toHaveText('AXON-3');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 16: Rechte DoR/DoD-Seitenleiste ist einklappbar und pro Ticket nutzbar
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 16: DoR/DoD Sidebar ist ausklappbar und pro Ticket abhakbar', async ({ page }) => {
+  const captures = {};
+  await setupMocks(page, { captures });
+  await page.goto('/');
+  await projectSelect(page).selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  const sidebar = page.locator('.workflow-sidebar');
+  await expect(sidebar).toBeVisible();
+  await expect(sidebar.getByText('Definition of Ready / Done')).toBeVisible();
+  await expect(sidebar.getByText('Clear title and understandable description are present.')).toHaveCount(0);
+
+  await sidebar.getByRole('button', { name: 'Definition of Ready' }).click();
+  await expect(sidebar.getByText('Clear title and understandable description are present.')).toBeVisible();
+
+  await sidebar.locator('select.input').selectOption('AXON-2');
+  const componentCheckbox = sidebar.getByLabel('Product/component is assigned.');
+  await componentCheckbox.check();
+
+  await expect.poll(() => captures.boardState?.checklists?.['AXON-2']?.ready?.component).toBe(true);
+  await page.screenshot({ path: 'e2e/screenshots/16a_dod_sidebar.png', fullPage: true });
 });
