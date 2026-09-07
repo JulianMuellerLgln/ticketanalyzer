@@ -34,7 +34,6 @@ function milestoneReactKey(issue, idx) {
 export default function Roadmap({ t, issues = [], jiraBaseUrl }) {
   const milestones = (issues || [])
     .filter((issue) => normalizeStatus(issue?.fields?.status?.name) === 'done')
-    .slice(0, 120)
     .map((issue, idx) => ({
       id: milestoneReactKey(issue, idx),
       key: issue.key,
@@ -49,8 +48,7 @@ export default function Roadmap({ t, issues = [], jiraBaseUrl }) {
       if (!a.date) return 1;
       if (!b.date) return -1;
       return b.date.localeCompare(a.date);
-    })
-    .slice(0, 40);
+    });
 
   const totalPoints = milestones.reduce((sum, item) => sum + item.points, 0);
 

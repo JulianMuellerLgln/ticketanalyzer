@@ -1,5 +1,6 @@
 const axios = require('axios');
 const DEFAULT_LARGE_MODEL = process.env.OLLAMA_MODEL || 'qwen3:14b';
+const DEFAULT_OLLAMA_TIMEOUT_MS = 300000;
 
 function getOllamaBase() {
   return process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
@@ -7,6 +8,11 @@ function getOllamaBase() {
 
 function getConfiguredDefaultModel() {
   return DEFAULT_LARGE_MODEL;
+}
+
+function getOllamaTimeoutMs() {
+  const value = Number(process.env.OLLAMA_TIMEOUT_MS);
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_OLLAMA_TIMEOUT_MS;
 }
 
 function parseModelBillions(name) {
@@ -106,8 +112,8 @@ async function chat(prompt, options = {}) {
   try {
     const res = await axios.post(
       `${getOllamaBase()}/api/generate`,
-      { model, prompt, stream: false },
-      { timeout: 120000 }
+      { model, prompt, stream: false, think: false },
+      { timeout: getOllamaTimeoutMs() }
     );
     return res.data.response || '';
   } catch (err) {
@@ -308,6 +314,7 @@ module.exports = {
   buildIdeaEvalPrompt,
   buildRefinementPrompt,
   getConfiguredDefaultModel,
+  getOllamaTimeoutMs,
   pickPreferredModel,
   resolveModel,
   parseModelBillions,

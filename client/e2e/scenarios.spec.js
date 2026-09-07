@@ -161,9 +161,15 @@ test('Szenario 5: Roadmap Timeline anzeigen', async ({ page }) => {
   await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(500);
 
-  const roadmap = page.locator('.roadmap-timeline');
+  const archiveWidget = page.locator('.dashboard-right-rail .widget').last();
+  await expect(archiveWidget.locator('.widget-title')).toHaveText('Archive');
+
+  const archiveToggle = archiveWidget.locator('.widget-collapse-btn');
+  await archiveToggle.click();
+
+  const roadmap = archiveWidget.locator('.roadmap-timeline');
   await expect(roadmap).toBeVisible();
-  await expect(page.getByText('Delivered outcomes and shipped items instead of open backlog work.')).toBeVisible();
+  await expect(archiveWidget.getByText('Completed and archived tickets from finished delivery work.')).toBeVisible();
   await expect(roadmap.getByText('AXON-4 - Improve search performance')).toBeVisible();
   await expect(roadmap.getByText('Delivered')).toBeVisible();
   await expect(roadmap.getByText('2 Points')).toBeVisible();
@@ -244,7 +250,15 @@ test('Szenario 8: Widget maximieren und minimieren', async ({ page }) => {
   await page.waitForTimeout(400);
 
   // Tickets-Widget maximieren: den ⊞ Button im ersten Widget klicken
-  const maximizeBtn = page.locator('.widget').first().locator('button.icon-btn');
+  const firstWidget = page.locator('.widget').first();
+  const collapseBtn = firstWidget.locator('button.widget-collapse-btn');
+  await expect(collapseBtn).toBeVisible();
+  await collapseBtn.click();
+  await expect(firstWidget.locator('.widget-body')).toHaveCount(0);
+  await collapseBtn.click();
+  await expect(firstWidget.locator('.widget-body')).toBeVisible();
+
+  const maximizeBtn = firstWidget.locator('button.widget-expand-btn');
   await expect(maximizeBtn).toBeVisible();
   await maximizeBtn.click();
   await page.waitForTimeout(300);

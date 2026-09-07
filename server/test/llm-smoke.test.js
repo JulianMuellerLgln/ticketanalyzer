@@ -38,6 +38,7 @@ test('POST /api/llm/smoke-test returns the model reply for a test prompt', async
     assert.equal(payload.model, 'qwen3:14b');
     assert.match(payload.prompt, /single word pong/i);
     assert.equal(payload.stream, false);
+    assert.equal(payload.think, false);
     return { data: { response: 'pong' } };
   };
 

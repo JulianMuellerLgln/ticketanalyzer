@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, Globe, BookOpenText } from 'lucide-react';
+import { RefreshCw, Globe, BookOpenText, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { api } from './api';
 import { i18n } from './i18n';
@@ -16,22 +16,34 @@ import MiddleScrollArea from './components/MiddleScrollArea';
 
 const LLM_MODEL_STORAGE_KEY = 'ticketanalyzer.llmModel';
 
-function Widget({ title, children, className = '' }) {
+function Widget({ title, children, className = '', defaultCollapsed = false }) {
   const [expanded, setExpanded] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
-    <div className={`widget ${className}${expanded ? ' widget--expanded' : ''}`}>
+    <div className={`widget ${className}${expanded ? ' widget--expanded' : ''}${collapsed ? ' widget--collapsed' : ''}`}>
       <div className="wh">
         <span className="widget-title">{title}</span>
-        <button
-          className="icon-btn"
-          onClick={() => setExpanded((v) => !v)}
-          title={expanded ? 'Minimize' : 'Maximize'}
-        >
-          {expanded ? '⊡' : '⊞'}
-        </button>
+        <div className="widget-controls">
+          <button
+            className="icon-btn widget-collapse-btn"
+            onClick={() => setCollapsed((value) => !value)}
+            title={collapsed ? 'Expand' : 'Collapse'}
+            type="button"
+          >
+            {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+          </button>
+          <button
+            className="icon-btn widget-expand-btn"
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded ? 'Minimize' : 'Maximize'}
+            type="button"
+          >
+            {expanded ? '⊡' : '⊞'}
+          </button>
+        </div>
       </div>
-      <MiddleScrollArea className="widget-body">{children}</MiddleScrollArea>
+      {!collapsed && <MiddleScrollArea className="widget-body">{children}</MiddleScrollArea>}
     </div>
   );
 }
@@ -356,16 +368,16 @@ export default function App() {
                 <JiraSync projectKey={selectedProject} t={t} jiraBaseUrl={jiraBaseUrl} />
               </Widget>
 
-              <Widget key="widget-roadmap" title={t.roadmap} className="widget--right-rail">
-                <Roadmap t={t} issues={issues} jiraBaseUrl={jiraBaseUrl} />
-              </Widget>
-
               <Widget key="widget-insights" title={t.insights} className="widget--right-rail">
                 <LLMInsights projectKey={selectedProject} issueCount={issues.length} t={t} lang={lang} jiraBaseUrl={jiraBaseUrl} llmModel={selectedModel} />
               </Widget>
 
               <Widget key="widget-idea" title={t.ideaEval} className="widget--right-rail">
                 <IdeaEvaluator t={t} lang={lang} llmModel={selectedModel} />
+              </Widget>
+
+              <Widget key="widget-roadmap" title={t.roadmap} className="widget--right-rail" defaultCollapsed>
+                <Roadmap t={t} issues={issues} jiraBaseUrl={jiraBaseUrl} />
               </Widget>
             </div>
           </div>

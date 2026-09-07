@@ -3,6 +3,7 @@ const test = require('node:test');
 
 const {
   buildSmokeTestPrompt,
+  getOllamaTimeoutMs,
   pickPreferredModel,
   resolveModel,
   parseModelBillions,
@@ -29,4 +30,18 @@ test('parseModelBillions extracts model size when present', () => {
 
 test('buildSmokeTestPrompt asks for a minimal pong response', () => {
   assert.match(buildSmokeTestPrompt(), /single word pong/i);
+});
+
+test('getOllamaTimeoutMs falls back to a longer default timeout', () => {
+  const previous = process.env.OLLAMA_TIMEOUT_MS;
+  try {
+    delete process.env.OLLAMA_TIMEOUT_MS;
+    assert.equal(getOllamaTimeoutMs(), 300000);
+  } finally {
+    if (previous == null) {
+      delete process.env.OLLAMA_TIMEOUT_MS;
+    } else {
+      process.env.OLLAMA_TIMEOUT_MS = previous;
+    }
+  }
 });
