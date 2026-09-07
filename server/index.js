@@ -23,6 +23,7 @@ const {
   chat,
   buildSmokeTestPrompt,
   buildAnalysisPrompt,
+  buildFocusedAnalysisPrompt,
   buildIdeaEvalPrompt,
   buildRefinementPrompt,
   resolveModel,
@@ -616,6 +617,7 @@ app.post('/api/llm/analyze/:projectKey', async (req, res) => {
   const { projectKey } = req.params;
   const lang = req.query.lang || 'en';
   const model = asText(req.body?.model);
+  const focus = asText(req.body?.focus) || 'overview';
   try {
     const client = getClient();
     if (!cache.issues[projectKey] || cache.issues[projectKey].length === 0) {
@@ -626,7 +628,9 @@ app.post('/api/llm/analyze/:projectKey', async (req, res) => {
     if (!issues || issues.length === 0) {
       return res.status(400).json({ error: 'No issues available for analysis.' });
     }
-    const prompt = buildAnalysisPrompt(issues, lang);
+    const prompt = focus === 'overview'
+      ? buildAnalysisPrompt(issues, lang)
+      : buildFocusedAnalysisPrompt(issues, focus, lang);
     const raw = await chat(prompt, { model });
     let parsed;
     try {
@@ -634,7 +638,15 @@ app.post('/api/llm/analyze/:projectKey', async (req, res) => {
     } catch {
       parsed = { raw };
     }
-    res.json(normalizeAnalysis(parsed, issues));
+    res.json({
+      ...normalizeAnalysis(parsed, issues),
+      coverage: {
+        focus,
+        analyzedTickets: issues.length,
+        usedAllTickets: focus !== 'overview',
+        sampledTickets: focus === 'overview' ? Math.min(15, issues.length) : issues.length,
+      },
+    });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message, reason: e.reason || 'llm_error' });
   }

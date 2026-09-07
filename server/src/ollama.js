@@ -71,6 +71,37 @@ function buildSmokeTestPrompt() {
   return 'Reply with exactly the single word pong. No punctuation, no explanation.';
 }
 
+function compactIssue(issue, options = {}) {
+  const summaryLength = options.summaryLength || 120;
+  const descriptionLength = options.descriptionLength || 180;
+  const fields = issue?.fields || {};
+  const asPromptText = (value, maxLength) => {
+    if (value == null) return '';
+    const text = typeof value === 'string' ? value : JSON.stringify(value);
+    return String(text).replace(/\s+/g, ' ').slice(0, Math.max(0, maxLength));
+  };
+  const sprintValues = Object.values(fields)
+    .flatMap((value) => Array.isArray(value) ? value : [])
+    .filter((value) => value && typeof value === 'object' && value.id && value.name);
+  return {
+    k: issue?.key || '',
+    s: asPromptText(fields.summary, summaryLength),
+    d: asPromptText(fields.description, descriptionLength),
+    st: fields.status?.name || '',
+    p: fields.priority?.name || '',
+    sp: fields.__storyPoints ?? fields.customfield_10016 ?? 0,
+    a: fields.assignee?.displayName || '',
+    c: (fields.components || []).map((entry) => entry?.name).filter(Boolean),
+    l: (fields.labels || []).filter(Boolean),
+    fv: (fields.fixVersions || []).map((entry) => entry?.name).filter(Boolean),
+    sx: sprintValues.map((entry) => ({ id: entry.id, name: entry.name, state: entry.state || '' })),
+    cr: Array.isArray(fields.comment?.comments) ? fields.comment.comments.length : 0,
+    created: fields.created || '',
+    updated: fields.updated || '',
+    resolved: fields.resolutiondate || '',
+  };
+}
+
 async function checkHealth() {
   try {
     const res = await axios.get(`${getOllamaBase()}/api/tags`, { timeout: 5000 });
@@ -139,14 +170,7 @@ function buildAnalysisPrompt(issues, lang = 'en') {
     ? 'Antworte strikt auf Deutsch. Beantworte als technischer Product Owner. Schreibe alle Freitext-Felder auf Deutsch.'
     : 'Reply in English. Answer as a technical Product Owner.';
 
-  const simplified = issues.slice(0, 15).map((i) => ({
-    k: i.key,
-    s: (i.fields.summary || '').slice(0, 80),
-    st: i.fields.status?.name,
-    p: i.fields.priority?.name,
-    sp: i.fields.customfield_10016,
-    spx: i.fields.customfield_10020 || null,
-  }));
+  const simplified = issues.slice(0, 15).map((issue) => compactIssue(issue, { summaryLength: 80, descriptionLength: 0 }));
 
   return `${lang_intro}
 
@@ -208,6 +232,99 @@ Language rule:
 - Keep ticket keys and numbers unchanged.
 
 Return ONLY valid JSON, no markdown fences, no extra commentary.`;
+}
+
+function focusedAnalysisTemplate(focus) {
+  if (focus === 'redundancies') {
+    return `{
+  "redundancies": [
+    { "keys": ["A-1", "A-2"], "reason": "overlap reason" }
+  ]
+}`;
+  }
+  if (focus === 'gaps') {
+    return `{
+  "gaps": [
+    { "text": "important missing information" }
+  ]
+}`;
+  }
+  if (focus === 'suggestions') {
+    return `{
+  "suggestions": [
+    { "key": "TICKET-123", "text": "specific improvement" }
+  ]
+}`;
+  }
+  if (focus === 'slowTickets') {
+    return `{
+  "slowTickets": [
+    { "key": "TICKET-123", "daysOpen": number, "note": "why slow and what to do" }
+  ]
+}`;
+  }
+  if (focus === 'backlogRefinementCandidates') {
+    return `{
+  "backlogRefinementCandidates": [
+    {
+      "key": "TICKET-123",
+      "reason": "why this should be refined now",
+      "missing": ["acceptance criteria", "estimate", "owner"]
+    }
+  ]
+}`;
+  }
+  return `{
+  "summary": "2-4 sentence executive health summary"
+}`;
+}
+
+function focusedAnalysisInstructions(focus) {
+  if (focus === 'redundancies') {
+    return 'Find semantically overlapping or duplicate tickets across the FULL dataset. Review all tickets, not just a sample. Only return high-confidence overlaps.';
+  }
+  if (focus === 'gaps') {
+    return 'Review the FULL dataset and identify missing backlog or delivery concerns that should exist but are not represented well enough.';
+  }
+  if (focus === 'suggestions') {
+    return 'Review the FULL dataset and return the most actionable delivery suggestions.';
+  }
+  if (focus === 'slowTickets') {
+    return 'Review the FULL dataset and flag tickets that appear stalled, aging, or delivery-risky.';
+  }
+  if (focus === 'backlogRefinementCandidates') {
+    return 'Review the FULL dataset and identify the tickets most in need of refinement.';
+  }
+  return 'Review the FULL dataset and summarize the highest-value findings.';
+}
+
+function buildFocusedAnalysisPrompt(issues, focus = 'overview', lang = 'en') {
+  const langIntro = lang === 'de'
+    ? 'Antworte strikt auf Deutsch. Beantworte als technischer Product Owner. Schreibe alle Freitext-Felder auf Deutsch.'
+    : 'Reply in English. Answer as a technical Product Owner.';
+  const compact = issues.map((issue) => compactIssue(issue));
+  return `${langIntro}
+
+You are analyzing the FULL Jira dataset of ${issues.length} tickets.
+Every ticket below is in scope. Do not sample or ignore tickets. The user explicitly wants 100% ticket coverage for this focused question.
+
+Task:
+${focusedAnalysisInstructions(focus)}
+
+Compact ticket dataset:
+${JSON.stringify(compact)}
+
+Respond with ONLY valid JSON in exactly this shape:
+${focusedAnalysisTemplate(focus)}
+
+Rules:
+- Use only ticket keys that exist in the provided dataset.
+- Do not invent facts or tickets.
+- Keep findings concise and actionable.
+- If language is German, all free text must be German.
+- For duplicate detection, only return high-confidence matches and explain the overlap clearly.
+
+Return ONLY valid JSON.`;
 }
 
 function buildIdeaEvalPrompt(ideaText, lang = 'en') {
@@ -311,6 +428,7 @@ module.exports = {
   chat,
   buildSmokeTestPrompt,
   buildAnalysisPrompt,
+  buildFocusedAnalysisPrompt,
   buildIdeaEvalPrompt,
   buildRefinementPrompt,
   getConfiguredDefaultModel,

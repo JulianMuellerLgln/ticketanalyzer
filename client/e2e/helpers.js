@@ -204,6 +204,44 @@ export async function setupMocks(page, overrides = {}) {
       slowTickets: [
         { key: 'AXON-3', daysOpen: 30, note: 'Stalled in backlog, no activity.' },
       ],
+      coverage: {
+        focus: 'overview',
+        analyzedTickets: 4,
+        usedAllTickets: false,
+        sampledTickets: 4,
+      },
+    },
+    analyzeByFocus: {
+      suggestions: {
+        suggestions: [
+          { key: 'AXON-2', text: 'Mobile crash is critical – assign immediately.' },
+        ],
+        coverage: { focus: 'suggestions', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
+      },
+      redundancies: {
+        redundancies: [
+          { keys: ['AXON-3', 'AXON-4'], reason: 'Dark mode and search may share UI rework.' },
+        ],
+        coverage: { focus: 'redundancies', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
+      },
+      gaps: {
+        gaps: [
+          { text: 'Missing ticket for API rate limiting.' },
+        ],
+        coverage: { focus: 'gaps', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
+      },
+      slowTickets: {
+        slowTickets: [
+          { key: 'AXON-3', daysOpen: 30, note: 'Stalled in backlog, no activity.' },
+        ],
+        coverage: { focus: 'slowTickets', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
+      },
+      backlogRefinementCandidates: {
+        backlogRefinementCandidates: [
+          { key: 'AXON-2', reason: 'Needs clearer implementation details.', missing: ['owner'] },
+        ],
+        coverage: { focus: 'backlogRefinementCandidates', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
+      },
     },
     evaluateIdea: {
       feasibility: 'high',
@@ -289,7 +327,11 @@ export async function setupMocks(page, overrides = {}) {
   await page.route('**/api/llm/analyze/**', (route) =>
     {
       captures.analyze = route.request().postDataJSON?.() || {};
-      return route.fulfill({ json: mocks.analyze });
+      const focus = captures.analyze.focus || 'overview';
+      const payload = focus === 'overview'
+        ? mocks.analyze
+        : (mocks.analyzeByFocus?.[focus] || mocks.analyze);
+      return route.fulfill({ json: payload });
     }
   );
   await page.route('**/api/llm/evaluate-idea', (route) =>
@@ -301,7 +343,7 @@ export async function setupMocks(page, overrides = {}) {
   await page.route('**/api/llm/smoke-test', (route) =>
     {
       captures.llmSmokeTest = route.request().postDataJSON?.() || {};
-      return route.fulfill({ json: mocks.llmSmokeTest });
+      return route.fulfill({ status: mocks.llmSmokeTestStatus || 200, json: mocks.llmSmokeTest });
     }
   );
   await page.route('**/api/llm/refine-ticket', (route) =>

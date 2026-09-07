@@ -91,7 +91,7 @@ test('Szenario 3: LLM-Analyse starten', async ({ page }) => {
   await page.waitForTimeout(400);
 
   // Analyse-Button klicken
-  const runBtn = page.getByRole('button', { name: 'Run Analysis' });
+  const runBtn = page.getByRole('button', { name: 'Overview' });
   await expect(runBtn).toBeEnabled();
   await runBtn.click();
   await page.waitForTimeout(600);
@@ -101,16 +101,17 @@ test('Szenario 3: LLM-Analyse starten', async ({ page }) => {
   await expect(page.getByText('Confidence')).not.toBeVisible();
 
   // Suggestions-Sektion soll aufgeklappt sein
-  await expect(page.getByRole('button', { name: 'Suggestions' })).toBeVisible();
+  await expect(page.locator('.insights-focus-actions').getByRole('button', { name: 'Suggestions' })).toBeVisible();
   await expect(page.getByText('Mobile crash is critical')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/03a_llm_analysis.png', fullPage: true });
 
   // Gaps-Sektion aufklappen
-  await page.getByText('Gaps').click();
+  await page.locator('.analysis-results').getByRole('button', { name: 'Gaps' }).click();
   await page.waitForTimeout(250);
   await expect(page.getByText('No ticket for automated testing coverage.')).toBeVisible();
   expect(captures.analyze.model).toBe('qwen3:14b');
+  expect(captures.analyze.focus).toBe('overview');
 
   await page.screenshot({ path: 'e2e/screenshots/03b_gaps_section.png', fullPage: true });
 });
@@ -356,7 +357,7 @@ test('Szenario 13: Refinement mit lokaler KI', async ({ page }) => {
   await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
-  await page.getByRole('button', { name: 'Refinement' }).click();
+  await page.getByRole('button', { name: 'Refinement', exact: true }).click();
   await expect(page.getByText('Refinement focus')).toBeVisible();
   await expect(page.getByText('Modernisierungs Board')).toBeVisible();
 
@@ -632,10 +633,48 @@ test('Szenario 18: LLM-Smoketest prueft das ausgewaehlte Modell', async ({ page 
   await page.waitForTimeout(400);
 
   await page.locator('.toolbar-right select.input').selectOption('qwen3:4b');
-  await page.getByRole('button', { name: 'Test LLM' }).click();
+  const smokeButton = page.getByRole('button', { name: 'LLM' }).first();
+  await smokeButton.click();
   await page.waitForTimeout(300);
 
-  await expect(page.getByText('LLM test ok')).toBeVisible();
-  await expect(page.getByText('pong')).toBeVisible();
+  await expect(smokeButton).toHaveClass(/smoke-test-btn--ok/);
   expect(captures.llmSmokeTest.model).toBe('qwen3:4b');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 19: Fokus-Analyse nutzt alle Tickets fuer Duplikate
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 19: Fokus-Analyse nutzt alle Tickets fuer Duplikate', async ({ page }) => {
+  const captures = {};
+  await setupMocks(page, { captures });
+  await page.goto('/');
+  await projectSelect(page).selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  await page.getByRole('button', { name: 'Duplicates' }).click();
+  await page.waitForTimeout(400);
+
+  expect(captures.analyze.focus).toBe('redundancies');
+  await expect(page.getByText('All tickets')).toBeVisible();
+  await page.getByRole('button', { name: 'Redundancies' }).click();
+  await expect(page.getByText('Dark mode and search may share UI rework.')).toBeVisible();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 20: Smoke-Test-Fehler macht LLM-Status sichtbar rot
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 20: Smoke-Test-Fehler markiert LLM als problematisch', async ({ page }) => {
+  await setupMocks(page, {
+    llmSmokeTestStatus: 404,
+    llmSmokeTest: { error: 'Smoke test route missing on the backend. Restart the server.' },
+  });
+  await page.goto('/');
+  await page.waitForTimeout(400);
+
+  const smokeButton = page.getByRole('button', { name: 'LLM' }).first();
+  await smokeButton.click();
+  await page.waitForTimeout(300);
+
+  await expect(smokeButton).toHaveClass(/smoke-test-btn--error/);
+  await expect(page.getByText('LLM issue')).toBeVisible();
 });

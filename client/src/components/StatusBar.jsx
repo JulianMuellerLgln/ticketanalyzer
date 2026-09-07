@@ -13,6 +13,7 @@ const dot = (ok) => ({
 
 export default function StatusBar({
   llm,
+  llmSmoke,
   selectedModel,
   jiraOk,
   projectCount,
@@ -22,6 +23,11 @@ export default function StatusBar({
   lastRefresh,
   t,
 }) {
+  const llmHealthy = Boolean(llm?.online) && llmSmoke?.ok !== false;
+  const llmLabel = !llm?.online ? t.llmOffline : llmSmoke?.ok === false ? t.llmDegraded : t.llmOnline;
+  const llmTitle = llmSmoke?.ok === false
+    ? (llmSmoke.error || t.llmSmokeFailed)
+    : (selectedModel || llm?.recommendedModel || llm?.defaultModel || '');
   return (
     <div className="statusbar">
       <span className="statusbar-brand">
@@ -33,16 +39,17 @@ export default function StatusBar({
       <div className="statusbar-indicators">
         <AnimatePresence mode="wait">
           <motion.span
-            key={llm?.online ? 'on' : 'off'}
+            key={llmHealthy ? 'on' : 'off'}
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 4 }}
             transition={{ duration: 0.2 }}
             className="status-chip"
+            title={llmTitle}
           >
             <Cpu size={11} style={{ marginRight: 4 }} />
-            <span style={dot(llm?.online)} />
-            {llm?.online ? t.llmOnline : t.llmOffline}
+            <span style={dot(llmHealthy)} />
+            {llmLabel}
             {llm?.online && (selectedModel || llm.recommendedModel || llm.defaultModel) && (
               <span className="status-model"> · {(selectedModel || llm.recommendedModel || llm.defaultModel)}</span>
             )}

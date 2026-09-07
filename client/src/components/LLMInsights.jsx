@@ -55,17 +55,19 @@ export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseU
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
+  const [activeFocus, setActiveFocus] = useState('overview');
 
-  async function run() {
+  async function run(focus = 'overview') {
     if (!projectKey || issueCount <= 0) {
       setErr(t.noIssues);
       return;
     }
     setLoading(true);
     setErr(null);
+    setActiveFocus(focus);
     try {
-      const res = await api.analyze(projectKey, lang, llmModel);
-      setData(res);
+      const res = await api.analyze(projectKey, lang, llmModel, focus);
+      setData((previous) => focus === 'overview' ? res : { ...(previous || {}), ...res });
     } catch (e) {
       setErr(e?.response?.data?.error || e.message || 'Analysis failed');
     } finally {
@@ -73,18 +75,35 @@ export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseU
     }
   }
 
+  const focusButtons = [
+    { key: 'overview', label: t.analysisOverview || t.runAnalysis },
+    { key: 'suggestions', label: t.analysisSuggestions || t.suggestions },
+    { key: 'redundancies', label: t.analysisDuplicates || t.redundancies },
+    { key: 'gaps', label: t.gaps },
+    { key: 'slowTickets', label: t.analysisSlowTickets || t.slowTickets },
+    { key: 'backlogRefinementCandidates', label: t.analysisRefinement || t.backlogRefinement },
+  ];
+
   return (
     <div className="insights">
       <div className="insights-header">
-        <button className="btn-primary" onClick={run} disabled={loading || !projectKey || issueCount <= 0}>
-          {loading ? (
-            <span className="spinner" />
-          ) : null}
-          {loading ? t.analyzing : t.runAnalysis}
-        </button>
+        <div className="insights-focus-actions">
+          {focusButtons.map((focus) => (
+            <button
+              key={focus.key}
+              className={`btn-icon insights-focus-btn${activeFocus === focus.key ? ' insights-focus-btn--active' : ''}`}
+              onClick={() => run(focus.key)}
+              disabled={loading || !projectKey || issueCount <= 0}
+              type="button"
+            >
+              {loading && activeFocus === focus.key ? <span className="spinner" /> : null}
+              {focus.label}
+            </button>
+          ))}
+        </div>
         {issueCount > 0 && (
-          <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
-            {issueCount} tickets
+          <span className="muted insights-ticket-count">
+            {issueCount} {t.ticketsLabel || 'tickets'}
           </span>
         )}
       </div>
@@ -103,6 +122,17 @@ export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseU
         >
           {data.summary && (
             <div className="summary-block">{data.summary}</div>
+          )}
+
+          {data.coverage && (
+            <div className="workflow-meta-row" style={{ marginBottom: 8 }}>
+              <span className="workflow-chip">
+                {data.coverage.usedAllTickets ? t.analysisAllTickets : `${data.coverage.sampledTickets}/${data.coverage.analyzedTickets}`}
+              </span>
+              {data.coverage.usedAllTickets && (
+                <span className="workflow-chip">{data.coverage.analyzedTickets} {t.ticketsLabel || 'tickets'}</span>
+              )}
+            </div>
           )}
 
           {data.plannedVsDone && (

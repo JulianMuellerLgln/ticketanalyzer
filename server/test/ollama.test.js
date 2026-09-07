@@ -3,6 +3,7 @@ const test = require('node:test');
 
 const {
   buildSmokeTestPrompt,
+  buildFocusedAnalysisPrompt,
   getOllamaTimeoutMs,
   pickPreferredModel,
   resolveModel,
@@ -44,4 +45,15 @@ test('getOllamaTimeoutMs falls back to a longer default timeout', () => {
       process.env.OLLAMA_TIMEOUT_MS = previous;
     }
   }
+});
+
+test('buildFocusedAnalysisPrompt includes the full ticket set for focused analysis', () => {
+  const prompt = buildFocusedAnalysisPrompt([
+    { key: 'AXON-1', fields: { summary: 'First', status: { name: 'Open' }, labels: ['a'] } },
+    { key: 'AXON-2', fields: { summary: 'Second', status: { name: 'Done' }, labels: ['b'] } },
+  ], 'redundancies', 'en');
+  assert.match(prompt, /FULL Jira dataset of 2 tickets/);
+  assert.match(prompt, /AXON-1/);
+  assert.match(prompt, /AXON-2/);
+  assert.match(prompt, /100% ticket coverage/);
 });

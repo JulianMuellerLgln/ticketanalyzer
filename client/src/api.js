@@ -27,8 +27,8 @@ export const api = {
   llmHealth: () => axios.get(`${BASE}/llm/health`).then((r) => r.data),
   llmSmokeTest: (model) =>
     axios.post(`${BASE}/llm/smoke-test`, { model }).then((r) => r.data),
-  analyze: (key, lang, model) =>
-    axios.post(`${BASE}/llm/analyze/${key}`, { model }, { params: { lang } }).then((r) => r.data),
+  analyze: (key, lang, model, focus = 'overview') =>
+    axios.post(`${BASE}/llm/analyze/${key}`, { model, focus }, { params: { lang } }).then((r) => r.data),
   refineTicket: (payload) =>
     axios.post(`${BASE}/llm/refine-ticket`, payload).then((r) => r.data),
   evaluateIdea: (idea, lang, model) =>

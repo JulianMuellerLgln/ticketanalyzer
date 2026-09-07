@@ -129,30 +129,42 @@ html, body {
   justify-content: flex-end;
 }
 
-.toolbar-chip {
+.smoke-test-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: min(420px, 40vw);
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg3);
-  color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.toolbar-chip--ok {
+.smoke-test-btn--ok {
   border-color: rgba(46, 204, 113, 0.35);
-  color: #7ad9a6;
 }
 
-.toolbar-chip--error {
-  border-color: rgba(229, 62, 62, 0.35);
+.smoke-test-btn--error {
+  border-color: rgba(229, 62, 62, 0.45);
   color: #f39a9a;
+}
+
+.smoke-test-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #555;
+  box-shadow: none;
+  flex-shrink: 0;
+}
+
+.smoke-test-dot--ok {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+}
+
+.smoke-test-dot--error {
+  background: #e53e3e;
+  box-shadow: 0 0 6px rgba(229, 62, 62, 0.5);
+}
+
+.smoke-test-dot--loading {
+  background: #f0a500;
 }
 
 .mode-switch {
@@ -1086,7 +1098,26 @@ html, body {
 .insights-header {
   display: flex;
   align-items: center;
+   justify-content: space-between;
+   gap: 8px;
+   flex-wrap: wrap;
   margin-bottom: 10px;
+}
+
+.insights-focus-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.insights-focus-btn--active {
+  border-color: #38516b;
+  background: rgba(56, 81, 107, 0.22);
+  color: var(--text);
+}
+
+.insights-ticket-count {
+  font-size: 11px;
 }
 
 .analysis-results { font-size: 12px; }

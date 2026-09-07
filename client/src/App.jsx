@@ -84,6 +84,10 @@ export default function App() {
   }, [selectedModel]);
 
   useEffect(() => {
+    setLlmSmoke({ loading: false, ok: null, response: '', error: '', model: '', durationMs: 0 });
+  }, [selectedModel]);
+
+  useEffect(() => {
     const availableModels = llm.models || [];
     const savedModel = localStorage.getItem(LLM_MODEL_STORAGE_KEY) || '';
     const currentValid = selectedModel && availableModels.includes(selectedModel);
@@ -149,16 +153,17 @@ export default function App() {
         durationMs: Number(result?.durationMs) || 0,
       });
     } catch (error) {
+      const responseError = error?.response?.data?.error || error.message || 'LLM smoke test failed';
       setLlmSmoke({
         loading: false,
         ok: false,
         response: '',
-        error: error?.response?.data?.error || error.message || 'LLM smoke test failed',
+        error: error?.response?.status === 404 ? t.llmSmokeMissingRoute : responseError,
         model: selectedModel,
         durationMs: 0,
       });
     }
-  }, [selectedModel]);
+  }, [selectedModel, t.llmSmokeMissingRoute]);
 
   // Auto-refresh hourly
   useEffect(() => {
@@ -208,6 +213,7 @@ export default function App() {
       <div className="app-topbar" ref={topbarRef}>
         <StatusBar
           llm={llm}
+          llmSmoke={llmSmoke}
           selectedModel={selectedModel}
           jiraOk={jiraOk}
           projectCount={projects.length}
@@ -287,28 +293,23 @@ export default function App() {
             </select>
 
             <button
-              className="btn-icon"
+              className={`btn-icon smoke-test-btn${llmSmoke.ok === true ? ' smoke-test-btn--ok' : ''}${llmSmoke.ok === false ? ' smoke-test-btn--error' : ''}`}
               onClick={runLlmSmokeTest}
               disabled={!llm.online || (llm.models || []).length === 0 || llmSmoke.loading}
-              title={t.llmSmokeTest}
+              title={
+                llmSmoke.loading
+                  ? t.llmSmokeRunning
+                  : llmSmoke.ok === true
+                    ? `${t.llmSmokeOk} · ${llmSmoke.model}${llmSmoke.durationMs > 0 ? ` · ${Math.round(llmSmoke.durationMs / 100) / 10}s` : ''}`
+                    : llmSmoke.ok === false
+                      ? `${t.llmSmokeFailed} · ${llmSmoke.error}`
+                      : t.llmSmokeTest
+              }
               type="button"
             >
+              <span className={`smoke-test-dot${llmSmoke.ok === true ? ' smoke-test-dot--ok' : ''}${llmSmoke.ok === false ? ' smoke-test-dot--error' : ''}${llmSmoke.loading ? ' smoke-test-dot--loading' : ''}`} />
               {llmSmoke.loading ? t.llmSmokeRunning : t.llmSmokeTest}
             </button>
-
-            {llmSmoke.ok !== null && (
-              <span
-                className={`toolbar-chip${llmSmoke.ok ? ' toolbar-chip--ok' : ' toolbar-chip--error'}`}
-                title={llmSmoke.ok
-                  ? `${llmSmoke.model} · ${llmSmoke.response}`
-                  : `${llmSmoke.model} · ${llmSmoke.error}`}
-              >
-                {llmSmoke.ok ? t.llmSmokeOk : t.llmSmokeFailed}
-                {llmSmoke.model ? ` · ${llmSmoke.model}` : ''}
-                {llmSmoke.durationMs > 0 ? ` · ${Math.round(llmSmoke.durationMs / 100) / 10}s` : ''}
-                {llmSmoke.ok && llmSmoke.response ? ` · ${llmSmoke.response}` : ''}
-              </span>
-            )}
 
             <button
               className="btn-icon"
