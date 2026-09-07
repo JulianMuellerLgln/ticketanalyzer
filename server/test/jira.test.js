@@ -96,6 +96,57 @@ test('fetchIssues rejects invalid project keys before calling Jira', async () =>
   await assert.rejects(() => fetchIssues(client, 'team-3d'), /Invalid project key: team-3d/);
 });
 
+test('fetchIssues paginates search results and returns all tickets', async () => {
+  const calls = [];
+  const client = {
+    get: async (route, options) => {
+      calls.push({ route, options });
+      if (route === '/field') {
+        return {
+          data: [
+            { id: 'customfield_12345', schema: { custom: 'com.pyxis.greenhopper.jira:gh-sprint' } },
+          ],
+        };
+      }
+      if (route === '/search') {
+        const startAt = options?.params?.startAt ?? 0;
+        if (startAt === 0) {
+          return {
+            data: {
+              total: 250,
+              issues: Array.from({ length: 100 }, (_, idx) => ({ key: `AXON-${idx + 1}`, fields: {} })),
+            },
+          };
+        }
+        if (startAt === 100) {
+          return {
+            data: {
+              total: 250,
+              issues: Array.from({ length: 100 }, (_, idx) => ({ key: `AXON-${idx + 101}`, fields: {} })),
+            },
+          };
+        }
+        return {
+          data: {
+            total: 250,
+            issues: Array.from({ length: 50 }, (_, idx) => ({ key: `AXON-${idx + 201}`, fields: {} })),
+          },
+        };
+      }
+      throw new Error(`Unexpected route: ${route}`);
+    },
+  };
+
+  const issues = await fetchIssues(client, 'AXON');
+  const searchCalls = calls.filter((call) => call.route === '/search');
+
+  assert.equal(searchCalls.length, 3);
+  assert.equal(searchCalls[0].options.params.startAt, 0);
+  assert.equal(searchCalls[1].options.params.startAt, 100);
+  assert.equal(searchCalls[2].options.params.startAt, 200);
+  assert.equal(issues.length, 250);
+});
+
 test('pickObjectiveBoard prefers modernization-style objective boards', () => {
   const result = pickObjectiveBoard([
     { id: 1, name: 'Team Board' },

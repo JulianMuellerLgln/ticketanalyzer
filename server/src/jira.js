@@ -336,27 +336,46 @@ function injectDerivedEstimate(issue, estimateFieldIds) {
   return issue;
 }
 
-async function fetchIssues(client, projectKey, maxResults = 200) {
+async function fetchIssues(client, projectKey, maxResults = 100) {
   if (!/^[A-Z][A-Z0-9]+$/.test(projectKey)) {
     throw new Error(`Invalid project key: ${projectKey}`);
   }
   const sprintFieldIds = await fetchSprintFieldIds(client);
   const estimateFieldIds = await fetchEstimateFieldIds(client);
   const dynamicFieldIds = [...new Set([...sprintFieldIds, ...estimateFieldIds])];
-  const res = await client.get('/search', {
-    params: {
-      jql: `project = ${projectKey} ORDER BY updated DESC`,
-      maxResults,
-      fields: [
-        'summary', 'status', 'priority', 'assignee', 'reporter',
-        'created', 'updated', 'duedate', 'resolutiondate', 'description',
-        'issuetype', 'labels', 'components', 'fixVersions',
-        'comment',
-        ...dynamicFieldIds,
-      ].join(','),
-    },
-  });
-  return (res.data.issues || []).map((issue) => injectDerivedEstimate(issue, estimateFieldIds));
+  const requestedMaxResults = Number(maxResults);
+  const pageSize = Number.isFinite(requestedMaxResults) && requestedMaxResults > 0
+    ? Math.floor(requestedMaxResults)
+    : 100;
+  const fields = [
+    'summary', 'status', 'priority', 'assignee', 'reporter',
+    'created', 'updated', 'duedate', 'resolutiondate', 'description',
+    'issuetype', 'labels', 'components', 'fixVersions',
+    'comment',
+    ...dynamicFieldIds,
+  ].join(',');
+  const allIssues = [];
+  let startAt = 0;
+  let total = Number.POSITIVE_INFINITY;
+
+  while (startAt < total) {
+    const res = await client.get('/search', {
+      params: {
+        jql: `project = ${projectKey} ORDER BY updated DESC`,
+        startAt,
+        maxResults: pageSize,
+        fields,
+      },
+    });
+    const batch = res.data?.issues || [];
+    allIssues.push(...batch.map((issue) => injectDerivedEstimate(issue, estimateFieldIds)));
+    const reportedTotal = Number(res.data?.total);
+    total = Number.isFinite(reportedTotal) && reportedTotal >= 0 ? reportedTotal : startAt + batch.length;
+    if (batch.length === 0) break;
+    startAt += batch.length;
+  }
+
+  return allIssues;
 }
 
 function buildAgileClient() {

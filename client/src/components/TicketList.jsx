@@ -834,7 +834,6 @@ function DailyPanel({
       <div className="workflow-panel-header">
         <div>
           <div className="workflow-panel-title">{t.dailyTitle}</div>
-          <div className="workflow-panel-subtitle">{t.dailySubtitle}</div>
         </div>
         <div className="workflow-stat-grid">
           <WorkflowStat label={t.sprintBacklog} value={activeSprint?.name || t.noActiveSprint} />
@@ -845,24 +844,13 @@ function DailyPanel({
         </div>
       </div>
 
-      <div className="workflow-checklist">
-        <div className="workflow-section-title">{t.dailyChecklistTitle}</div>
-        <ul>
-          {t.dailyChecklist.map((entry) => (
-            <li key={entry}>{entry}</li>
-          ))}
-        </ul>
-      </div>
-
       <div className="workflow-meta-row">
-        <span className="workflow-chip">{t.dailyScrumHint}</span>
         {planning.openQuestions.trim() && <span className="workflow-chip">{t.planningOpenQuestions}: {planning.openQuestions}</span>}
         {planning.teamAbsences.trim() && <span className="workflow-chip">{t.planningTeamAbsences}: {planning.teamAbsences}</span>}
       </div>
 
       <div className="workflow-checklist">
         <div className="workflow-section-title">{t.dailyAiTitle}</div>
-        <div className="workflow-panel-subtitle">{t.dailyAiSubtitle}</div>
         <div className="workflow-actions">
           <button className="btn-primary" type="button" onClick={onGenerateDailyAdvice} disabled={!hasProject || dailyAdvice.loading}>
             <Sparkles size={12} />
