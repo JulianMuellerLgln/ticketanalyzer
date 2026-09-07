@@ -41,12 +41,14 @@ html, body {
   flex-direction: column;
   min-height: 100vh;
   width: 100%;
-  overflow: auto;
+  overflow: visible;
 }
 
 .app-topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 12000;
   background: var(--bg2);
 }
@@ -157,7 +159,7 @@ html, body {
   grid-auto-rows: minmax(300px, auto);
   align-items: start;
   gap: 16px;
-  padding: 16px;
+  padding: calc(16px + var(--app-topbar-height, 0px)) 16px 16px;
   min-height: 640px;
   overflow: auto;
   background:

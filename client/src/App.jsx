@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, Globe, BookOpenText } from 'lucide-react';
 
@@ -51,6 +51,7 @@ export default function App() {
 
   const [llm, setLlm] = useState({ online: false, models: [], defaultModel: '', recommendedModel: '' });
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(LLM_MODEL_STORAGE_KEY) || '');
+  const topbarRef = useRef(null);
 
   // Poll LLM health every 15s
   useEffect(() => {
@@ -137,9 +138,24 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    function syncTopbarHeight() {
+      const topbar = topbarRef.current;
+      const height = topbar ? topbar.offsetHeight : 0;
+      document.documentElement.style.setProperty('--app-topbar-height', `${height}px`);
+    }
+
+    syncTopbarHeight();
+    window.addEventListener('resize', syncTopbarHeight);
+    return () => {
+      window.removeEventListener('resize', syncTopbarHeight);
+      document.documentElement.style.removeProperty('--app-topbar-height');
+    };
+  }, []);
+
   return (
     <div className="app">
-      <div className="app-topbar">
+      <div className="app-topbar" ref={topbarRef}>
         <StatusBar
           llm={llm}
           selectedModel={selectedModel}

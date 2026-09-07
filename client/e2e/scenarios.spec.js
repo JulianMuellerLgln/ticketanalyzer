@@ -586,3 +586,27 @@ test('Szenario 16: DoR/DoD Sidebar ist ausklappbar und pro Ticket abhakbar', asy
   await expect.poll(() => captures.boardState?.checklists?.['AXON-2']?.ready?.component).toBe(true);
   await page.screenshot({ path: 'e2e/screenshots/16a_dod_sidebar.png', fullPage: true });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 17: Topbar bleibt beim Scrollen sichtbar
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 17: Topbar bleibt sticky beim Scrollen', async ({ page }) => {
+  await setupMocks(page);
+  await page.goto('/');
+  await projectSelect(page).selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  const topbar = page.locator('.app-topbar');
+  await expect(topbar).toBeVisible();
+
+  await page.evaluate(() => {
+    const canvas = document.querySelector('.canvas');
+    if (canvas) canvas.scrollTop = 2000;
+    window.scrollTo(0, document.body.scrollHeight);
+  });
+
+  const topbarBox = await topbar.boundingBox();
+  expect(topbarBox).not.toBeNull();
+  expect(topbarBox.y).toBeLessThanOrEqual(1);
+  expect(topbarBox.y).toBeGreaterThanOrEqual(-1);
+});
