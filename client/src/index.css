@@ -154,11 +154,7 @@ html, body {
 .canvas {
   flex: 1;
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-  grid-auto-rows: minmax(300px, auto);
-  align-items: start;
-  gap: 16px;
+  display: block;
   padding: calc(16px + var(--app-topbar-height, 0px)) 16px 16px;
   min-height: 640px;
   overflow: auto;
@@ -199,6 +195,26 @@ html, body {
 
 .widget--right-rail {
   grid-column: -2 / -1;
+}
+
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(360px, 1fr);
+  align-items: start;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-main-column,
+.dashboard-right-rail {
+  min-width: 0;
+}
+
+.dashboard-right-rail {
+  display: grid;
+  gap: 16px;
+  align-content: start;
 }
 
 .widget:hover {
@@ -1339,6 +1355,10 @@ html, body {
     grid-column: span 1;
   }
 
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+
   .sprint-summary-card {
     flex-direction: column;
     align-items: stretch;
@@ -1350,10 +1370,6 @@ html, body {
 }
 
 @media (max-width: 720px) {
-  .canvas {
-    grid-template-columns: 1fr;
-  }
-
   .ticket-modal-overlay {
     padding: calc(12px + var(--app-topbar-height, 0px)) 12px 12px;
   }

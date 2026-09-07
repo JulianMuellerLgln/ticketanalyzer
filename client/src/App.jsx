@@ -282,38 +282,44 @@ export default function App() {
 
       <div className="canvas">
         <AnimatePresence>
-          <Widget
-            key="widget-tickets"
-            title={t.sprintBoard}
-            className="widget--wide"
-          >
-            <TicketList
-              issues={issues}
-              projectKey={selectedProject}
-              t={t}
-              jiraBaseUrl={jiraBaseUrl}
-              workflowMode={workflowMode}
-              lang={lang}
-              onRefresh={doRefresh}
-              llmModel={selectedModel}
-            />
-          </Widget>
+          <div className="dashboard-layout">
+            <div className="dashboard-main-column">
+              <Widget
+                key="widget-tickets"
+                title={t.sprintBoard}
+                className="widget--wide"
+              >
+                <TicketList
+                  issues={issues}
+                  projectKey={selectedProject}
+                  t={t}
+                  jiraBaseUrl={jiraBaseUrl}
+                  workflowMode={workflowMode}
+                  lang={lang}
+                  onRefresh={doRefresh}
+                  llmModel={selectedModel}
+                />
+              </Widget>
+            </div>
 
-          <Widget key="widget-jirasync" title={t.syncStart} className="widget--right-rail">
-            <JiraSync projectKey={selectedProject} t={t} jiraBaseUrl={jiraBaseUrl} />
-          </Widget>
+            <div className="dashboard-right-rail">
+              <Widget key="widget-jirasync" title={t.syncStart} className="widget--right-rail">
+                <JiraSync projectKey={selectedProject} t={t} jiraBaseUrl={jiraBaseUrl} />
+              </Widget>
 
-          <Widget key="widget-roadmap" title={t.roadmap} className="widget--right-rail">
-            <Roadmap t={t} issues={issues} jiraBaseUrl={jiraBaseUrl} />
-          </Widget>
+              <Widget key="widget-roadmap" title={t.roadmap} className="widget--right-rail">
+                <Roadmap t={t} issues={issues} jiraBaseUrl={jiraBaseUrl} />
+              </Widget>
 
-          <Widget key="widget-insights" title={t.insights} className="widget--right-rail">
-            <LLMInsights projectKey={selectedProject} issueCount={issues.length} t={t} lang={lang} jiraBaseUrl={jiraBaseUrl} llmModel={selectedModel} />
-          </Widget>
+              <Widget key="widget-insights" title={t.insights} className="widget--right-rail">
+                <LLMInsights projectKey={selectedProject} issueCount={issues.length} t={t} lang={lang} jiraBaseUrl={jiraBaseUrl} llmModel={selectedModel} />
+              </Widget>
 
-          <Widget key="widget-idea" title={t.ideaEval} className="widget--right-rail">
-            <IdeaEvaluator t={t} lang={lang} llmModel={selectedModel} />
-          </Widget>
+              <Widget key="widget-idea" title={t.ideaEval} className="widget--right-rail">
+                <IdeaEvaluator t={t} lang={lang} llmModel={selectedModel} />
+              </Widget>
+            </div>
+          </div>
         </AnimatePresence>
       </div>
 
