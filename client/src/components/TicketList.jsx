@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, Save, Search, Sparkles, X } from 'lucide-react';
+import { Save, Search, Sparkles, X } from 'lucide-react';
 import { api } from '../api';
 import TicketLink from './TicketLink';
 import MiddleScrollArea from './MiddleScrollArea';
@@ -42,7 +42,7 @@ const DEFAULT_DAILY_ADVICE_STATE = {
 const READY_CHECK_KEYS = ['titleDescription', 'acceptance', 'objective', 'component', 'estimate', 'dependencies'];
 const DONE_CHECK_KEYS = ['tests', 'docs', 'openPoints', 'acceptanceVerified', 'merged'];
 const DEFAULT_CHECKLISTS_STATE = {};
-const TABLE_COLUMN_IDS = ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'];
+const TABLE_COLUMN_IDS = ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'acceptance'];
 const COLUMN_WIDTHS = {
   ticket: '105px',
   summary: 'minmax(220px, 1.7fr)',
@@ -51,8 +51,6 @@ const COLUMN_WIDTHS = {
   points: '70px',
   priority: '95px',
   status: '130px',
-  ready: '70px',
-  done: '70px',
   acceptance: 'minmax(180px, 1.1fr)',
 };
 function defaultTableState() {
@@ -332,8 +330,12 @@ function primaryComponentName(ticket) {
   return String(ticket?.fields?.components?.[0]?.name || '').trim();
 }
 
+function priorityLabel(ticket) {
+  return String(ticket?.fields?.priority?.name || ticket?.fields?.priority?.value || '').trim();
+}
+
 function storyPoints(ticket) {
-  const value = Number(ticket?.fields?.customfield_10016);
+  const value = Number(ticket?.fields?.__storyPoints ?? ticket?.fields?.customfield_10016);
   return Number.isFinite(value) ? value : 0;
 }
 
@@ -632,109 +634,7 @@ function ChecklistEditor({ title, items, progressLabelText, sectionKey, values, 
   );
 }
 
-function CollapsibleDefinition({ title, open, onToggle, children }) {
-  return (
-    <div className="definition-card">
-      <button type="button" className="definition-toggle" onClick={onToggle}>
-        <span className="definition-toggle-icon">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
-        <span className="workflow-section-title">{title}</span>
-      </button>
-      {open && children}
-    </div>
-  );
-}
-
-function TeamStandardsSidebar({
-  t,
-  tickets,
-  selectedChecklistTicketKey,
-  onSelectChecklistTicket,
-  checklistStates,
-  objectiveMatches,
-  onToggleChecklist,
-}) {
-  const [openState, setOpenState] = useState({
-    readyDefinition: false,
-    doneDefinition: false,
-    ticketChecklist: true,
-  });
-
-  const ticket = tickets.find((entry) => entry.key === selectedChecklistTicketKey) || null;
-  const objectiveMatch = ticket ? (objectiveMatches[ticket.key] || null) : null;
-
-  return (
-    <aside className="workflow-sidebar">
-      <div className="workflow-panel">
-        <div className="workflow-panel-header">
-          <div>
-            <div className="workflow-panel-title">{t.teamStandardsTitle}</div>
-            <div className="workflow-panel-subtitle">{t.teamStandardsSubtitle}</div>
-          </div>
-        </div>
-
-        <CollapsibleDefinition
-          title={t.definitionOfReadyTitle}
-          open={openState.readyDefinition}
-          onToggle={() => setOpenState((previous) => ({ ...previous, readyDefinition: !previous.readyDefinition }))}
-        >
-          <ul className="definition-list">
-            {t.definitionOfReadyItems.map((item) => (
-              <li key={`sidebar-ready-${item}`}>{item}</li>
-            ))}
-          </ul>
-        </CollapsibleDefinition>
-
-        <CollapsibleDefinition
-          title={t.definitionOfDoneTitle}
-          open={openState.doneDefinition}
-          onToggle={() => setOpenState((previous) => ({ ...previous, doneDefinition: !previous.doneDefinition }))}
-        >
-          <ul className="definition-list">
-            {t.definitionOfDoneItems.map((item) => (
-              <li key={`sidebar-done-${item}`}>{item}</li>
-            ))}
-          </ul>
-        </CollapsibleDefinition>
-
-        <CollapsibleDefinition
-          title={t.ticketChecklistTitle}
-          open={openState.ticketChecklist}
-          onToggle={() => setOpenState((previous) => ({ ...previous, ticketChecklist: !previous.ticketChecklist }))}
-        >
-          <div className="ticket-checklist-sidebar-content">
-            <select
-              className="input"
-              value={selectedChecklistTicketKey}
-              onChange={(event) => onSelectChecklistTicket(event.target.value)}
-            >
-              <option value="">{t.selectTicketForChecklist}</option>
-              {tickets.map((entry) => (
-                <option key={`checklist-ticket-${entry.key}`} value={entry.key}>
-                  {entry.key} — {entry.fields.summary}
-                </option>
-              ))}
-            </select>
-
-            {ticket ? (
-              <TicketChecklistTool
-                ticket={ticket}
-                t={t}
-                checklistState={checklistStates[ticket.key] || null}
-                objectiveMatch={objectiveMatch}
-                onToggle={(sectionKey, itemKey, checked) => onToggleChecklist(ticket.key, sectionKey, itemKey, checked)}
-                embedded
-              />
-            ) : (
-              <div className="muted">{t.selectTicketForChecklist}</div>
-            )}
-          </div>
-        </CollapsibleDefinition>
-      </div>
-    </aside>
-  );
-}
-
-function TicketChecklistTool({ ticket, t, checklistState, objectiveMatch, onToggle, embedded = false }) {
+function TicketChecklistTool({ ticket, t, checklistState, objectiveMatch, onToggle }) {
   const defaultState = getDefaultChecklistState(ticket, objectiveMatch);
   const effectiveReady = Object.fromEntries(
     READY_CHECK_KEYS.map((key) => [key, key in (checklistState?.ready || {}) ? checklistState.ready[key] : defaultState.ready[key]])
@@ -747,7 +647,7 @@ function TicketChecklistTool({ ticket, t, checklistState, objectiveMatch, onTogg
   const doneItems = DONE_CHECK_KEYS.map((key) => [key, t.doneChecklistItems[key]]);
 
   return (
-    <div className={`workflow-panel${embedded ? ' workflow-panel--embedded' : ''}`}>
+    <div className="workflow-panel">
       <div className="workflow-panel-header">
         <div>
           <div className="workflow-panel-title">{t.checklistToolTitle}</div>
@@ -1042,7 +942,7 @@ function TicketDetailsModal({
 
         <MiddleScrollArea className="ticket-modal-body">
           <div className="ticket-detail-grid">
-            <TicketDetailField label={t.priority} value={ticket.fields.priority?.name || t.noData} />
+            <TicketDetailField label={t.priority} value={priorityLabel(ticket) || t.noData} />
             <TicketDetailField label={t.assignee} value={ticket.fields.assignee?.displayName || t.unassigned} />
             <TicketDetailField label={t.reporter} value={ticket.fields.reporter?.displayName || t.noData} />
             <TicketDetailField label={t.createdAt} value={formatDateLabel(ticket.fields.created)} />
@@ -1184,27 +1084,23 @@ function tableColumnDefs(t) {
     points: { id: 'points', label: t.points },
     priority: { id: 'priority', label: t.priority },
     status: { id: 'status', label: t.status },
-    ready: { id: 'ready', label: t.readyCheck },
-    done: { id: 'done', label: t.doneCheck },
     acceptance: { id: 'acceptance', label: t.acceptanceCriteria },
   };
 }
 
-function ticketSortValue(ticket, columnId, objectiveMatch, checklistProgress) {
+function ticketSortValue(ticket, columnId, objectiveMatch) {
   if (columnId === 'ticket') return String(ticket.key || '');
   if (columnId === 'summary') return String(ticket.fields.summary || '');
   if (columnId === 'product') return primaryComponentName(ticket).toLowerCase();
   if (columnId === 'objective') return String(objectiveMatch?.objectiveKey || '');
   if (columnId === 'points') return storyPoints(ticket);
-  if (columnId === 'priority') return PRIORITY_RANK[ticket.fields.priority?.name] || 0;
+  if (columnId === 'priority') return PRIORITY_RANK[priorityLabel(ticket)] || 0;
   if (columnId === 'status') return String(ticket.fields.status?.name || '');
-  if (columnId === 'ready') return checklistProgress.ready.completed / checklistProgress.ready.total;
-  if (columnId === 'done') return checklistProgress.done.completed / checklistProgress.done.total;
   if (columnId === 'acceptance') return ticket.acceptanceScore;
   return '';
 }
 
-function renderTicketCell(columnId, { ticket, t, objectiveMatch, checklistProgress, acceptanceMeta, acceptanceTone, productName }) {
+function renderTicketCell(columnId, { ticket, t, objectiveMatch, acceptanceMeta, acceptanceTone, productName }) {
   if (columnId === 'ticket') {
     return (
       <span className="ticket-table-key">
@@ -1227,11 +1123,10 @@ function renderTicketCell(columnId, { ticket, t, objectiveMatch, checklistProgre
   }
   if (columnId === 'points') return <span className="ticket-table-points">{storyPoints(ticket)}</span>;
   if (columnId === 'priority') {
-    return <span className="ticket-table-priority" style={{ color: PRIORITY_TONE[ticket.fields.priority?.name] || '#aaa' }}>{ticket.fields.priority?.name || '—'}</span>;
+    const priority = priorityLabel(ticket);
+    return <span className="ticket-table-priority" style={{ color: PRIORITY_TONE[priority] || '#aaa' }}>{priority || '—'}</span>;
   }
   if (columnId === 'status') return <span className="ticket-table-status">{ticket.fields.status?.name || '—'}</span>;
-  if (columnId === 'ready') return <span className="ticket-table-progress">{progressLabel(checklistProgress.ready)}</span>;
-  if (columnId === 'done') return <span className="ticket-table-progress">{progressLabel(checklistProgress.done)}</span>;
   if (columnId === 'acceptance') {
     return (
       <span className="ticket-table-acceptance" style={{ background: acceptanceTone.bg, borderColor: acceptanceTone.border, color: acceptanceTone.color }}>
@@ -1257,7 +1152,6 @@ function Section({
   onOpenTicket,
   dropTargetLane,
   objectiveMatches,
-  checklistStates,
   columns = TABLE_COLUMN_IDS,
   sortBy = '',
   sortDir = 'asc',
@@ -1270,13 +1164,12 @@ function Section({
   const prepared = tickets
     .map((ticket, idx) => {
       const objectiveMatch = objectiveMatches[ticket.key] || null;
-      const checklistProgress = checklistProgressMap(ticket, checklistStates[ticket.key], objectiveMatch);
-      return { ticket, idx, objectiveMatch, checklistProgress };
+      return { ticket, idx, objectiveMatch };
     })
     .sort((left, right) => {
       if (!sortBy) return left.idx - right.idx;
-      const leftValue = ticketSortValue(left.ticket, sortBy, left.objectiveMatch, left.checklistProgress);
-      const rightValue = ticketSortValue(right.ticket, sortBy, right.objectiveMatch, right.checklistProgress);
+      const leftValue = ticketSortValue(left.ticket, sortBy, left.objectiveMatch);
+      const rightValue = ticketSortValue(right.ticket, sortBy, right.objectiveMatch);
       if (typeof leftValue === 'number' && typeof rightValue === 'number') {
         return sortDir === 'asc' ? leftValue - rightValue : rightValue - leftValue;
       }
@@ -1352,7 +1245,7 @@ function Section({
             {tickets.length === 0 && (
               <div className="muted sprint-empty">{t.noIssues}</div>
             )}
-            {prepared.map(({ ticket, idx, objectiveMatch, checklistProgress }) => {
+            {prepared.map(({ ticket, idx, objectiveMatch }) => {
               const acceptanceMeta = getAcceptanceMeta(ticket.acceptanceScore, t);
               const acceptanceTone = ACCEPTANCE_LEVELS[ticket.acceptanceScore] || ACCEPTANCE_LEVELS[0];
               const productName = primaryComponentName(ticket);
@@ -1373,7 +1266,7 @@ function Section({
                 >
                   {columns.map((columnId) => (
                     <span key={`${ticket.key}-${columnId}`} className={`ticket-cell ticket-cell--${columnId}`}>
-                      {renderTicketCell(columnId, { ticket, t, objectiveMatch, checklistProgress, acceptanceMeta, acceptanceTone, productName })}
+                      {renderTicketCell(columnId, { ticket, t, objectiveMatch, acceptanceMeta, acceptanceTone, productName })}
                     </span>
                   ))}
                 </motion.button>
@@ -1401,7 +1294,6 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
   const [persistError, setPersistError] = useState('');
   const [projectContextError, setProjectContextError] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [selectedChecklistTicketKey, setSelectedChecklistTicketKey] = useState('');
   const [refinementDraft, setRefinementDraft] = useState(createRefinementDraft(null));
   const [aiRefinement, setAiRefinement] = useState(DEFAULT_AI_STATE);
   const [dailyAdvice, setDailyAdvice] = useState(DEFAULT_DAILY_ADVICE_STATE);
@@ -1435,7 +1327,6 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
         setPersistError('');
         setPersistReady(false);
         setSelectedTicket(null);
-        setSelectedChecklistTicketKey('');
         setDailyAdvice(DEFAULT_DAILY_ADVICE_STATE);
         return;
       }
@@ -1522,13 +1413,17 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
   }, [tickets]);
 
   useEffect(() => {
-    if (selectedChecklistTicketKey && tickets.some((ticket) => ticket.key === selectedChecklistTicketKey)) return;
-    setSelectedChecklistTicketKey(tickets[0]?.key || '');
-  }, [selectedChecklistTicketKey, tickets]);
-
-  useEffect(() => {
     setDailyAdvice(DEFAULT_DAILY_ADVICE_STATE);
   }, [lang, projectKey]);
+
+  useEffect(() => {
+    if (!selectedTicket) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setSelectedTicket(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedTicket]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1657,7 +1552,6 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
 
   function openTicket(ticket) {
     setSelectedTicket(ticket);
-    setSelectedChecklistTicketKey(ticket.key);
     setRefinementDraft(createRefinementDraft(ticket));
     setAiRefinement(DEFAULT_AI_STATE);
   }
@@ -1991,7 +1885,6 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
                 onOpenTicket={openTicket}
                 dropTargetLane={dropTargetLane}
                 objectiveMatches={objectiveMatches}
-                checklistStates={checklists}
                 columns={tableState.columnOrder}
                 sortBy={tableState.sortBy}
                 sortDir={tableState.sortDir}
@@ -2015,7 +1908,6 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
                 onOpenTicket={openTicket}
                 dropTargetLane={dropTargetLane}
                 objectiveMatches={objectiveMatches}
-                checklistStates={checklists}
                 columns={tableState.columnOrder}
                 sortBy={tableState.sortBy}
                 sortDir={tableState.sortDir}
@@ -2057,7 +1949,6 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
                     onOpenTicket={openTicket}
                     dropTargetLane={dropTargetLane}
                     objectiveMatches={objectiveMatches}
-                    checklistStates={checklists}
                     columns={tableState.columnOrder}
                     sortBy={tableState.sortBy}
                     sortDir={tableState.sortDir}
@@ -2084,7 +1975,6 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
                   onOpenTicket={openTicket}
                   dropTargetLane={dropTargetLane}
                   objectiveMatches={objectiveMatches}
-                  checklistStates={checklists}
                   columns={tableState.columnOrder}
                   sortBy={tableState.sortBy}
                   sortDir={tableState.sortDir}
@@ -2096,15 +1986,6 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
             </div>
           </div>
 
-          <TeamStandardsSidebar
-            t={t}
-            tickets={tickets.filter((ticket) => !ticket.done)}
-            selectedChecklistTicketKey={selectedChecklistTicketKey}
-            onSelectChecklistTicket={setSelectedChecklistTicketKey}
-            checklistStates={checklists}
-            objectiveMatches={objectiveMatches}
-            onToggleChecklist={toggleChecklist}
-          />
       </div>
 
       <AnimatePresence>

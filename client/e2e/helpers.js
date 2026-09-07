@@ -230,7 +230,7 @@ export async function setupMocks(page, overrides = {}) {
     showArchive: true,
     checklists: {},
     table: {
-      columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'],
+      columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'acceptance'],
       sortBy: '',
       sortDir: 'asc',
     },
@@ -256,7 +256,7 @@ export async function setupMocks(page, overrides = {}) {
         showArchive: true,
         checklists: {},
         table: {
-          columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'],
+          columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'acceptance'],
           sortBy: '',
           sortDir: 'asc',
         },

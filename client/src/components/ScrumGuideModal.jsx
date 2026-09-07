@@ -1,7 +1,17 @@
+import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import MiddleScrollArea from './MiddleScrollArea';
 
 export default function ScrumGuideModal({ open, onClose, t }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (

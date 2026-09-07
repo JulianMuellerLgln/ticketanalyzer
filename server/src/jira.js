@@ -1,6 +1,8 @@
 const axios = require('axios');
 const DEFAULT_SPRINT_FIELD_IDS = ['customfield_10005', 'customfield_10020'];
+const DEFAULT_ESTIMATE_FIELD_IDS = ['customfield_10016'];
 let cachedSprintFieldIds = null;
+let cachedEstimateFieldIds = null;
 
 function normalizeBaseUrl(raw) {
   const value = (raw || '').trim().replace(/\/$/, '');
@@ -285,11 +287,62 @@ async function fetchSprintFieldIds(client) {
   return cachedSprintFieldIds;
 }
 
+function estimateFieldScore(field) {
+  const name = String(field?.name || '').toLowerCase();
+  const custom = String(field?.schema?.custom || '').toLowerCase();
+  let score = 0;
+  if (name === 'story points') score += 100;
+  if (name.includes('story point estimate')) score += 90;
+  if (name.includes('story point')) score += 70;
+  if (name.includes('sprint point')) score += 50;
+  if (custom.includes('float')) score += 10;
+  return score;
+}
+
+async function fetchEstimateFieldIds(client) {
+  if (Array.isArray(cachedEstimateFieldIds) && cachedEstimateFieldIds.length > 0) {
+    return cachedEstimateFieldIds;
+  }
+
+  try {
+    const res = await client.get('/field');
+    const estimateFields = (res.data || [])
+      .map((field) => ({ id: String(field?.id || '').trim(), score: estimateFieldScore(field) }))
+      .filter((field) => field.id && field.score > 0)
+      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
+      .map((field) => field.id);
+
+    cachedEstimateFieldIds = estimateFields.length > 0 ? estimateFields : DEFAULT_ESTIMATE_FIELD_IDS;
+  } catch {
+    cachedEstimateFieldIds = DEFAULT_ESTIMATE_FIELD_IDS;
+  }
+
+  return cachedEstimateFieldIds;
+}
+
+function injectDerivedEstimate(issue, estimateFieldIds) {
+  const fields = issue?.fields;
+  if (!fields || typeof fields !== 'object') return issue;
+  for (const fieldId of estimateFieldIds || []) {
+    const value = Number(fields[fieldId]);
+    if (Number.isFinite(value)) {
+      fields.__storyPoints = value;
+      fields.__storyPointFieldId = fieldId;
+      return issue;
+    }
+  }
+  fields.__storyPoints = 0;
+  fields.__storyPointFieldId = '';
+  return issue;
+}
+
 async function fetchIssues(client, projectKey, maxResults = 200) {
   if (!/^[A-Z][A-Z0-9]+$/.test(projectKey)) {
     throw new Error(`Invalid project key: ${projectKey}`);
   }
   const sprintFieldIds = await fetchSprintFieldIds(client);
+  const estimateFieldIds = await fetchEstimateFieldIds(client);
+  const dynamicFieldIds = [...new Set([...sprintFieldIds, ...estimateFieldIds])];
   const res = await client.get('/search', {
     params: {
       jql: `project = ${projectKey} ORDER BY updated DESC`,
@@ -298,13 +351,12 @@ async function fetchIssues(client, projectKey, maxResults = 200) {
         'summary', 'status', 'priority', 'assignee', 'reporter',
         'created', 'updated', 'duedate', 'resolutiondate', 'description',
         'issuetype', 'labels', 'components', 'fixVersions',
-        'customfield_10016',
         'comment',
-        ...sprintFieldIds,
+        ...dynamicFieldIds,
       ].join(','),
     },
   });
-  return res.data.issues || [];
+  return (res.data.issues || []).map((issue) => injectDerivedEstimate(issue, estimateFieldIds));
 }
 
 function buildAgileClient() {
@@ -430,10 +482,12 @@ async function updateIssue(client, issueKey, fields = {}) {
 
 module.exports = {
   DEFAULT_SPRINT_FIELD_IDS,
+  DEFAULT_ESTIMATE_FIELD_IDS,
   buildJiraClient,
   fetchProjects,
   fetchIssues,
   fetchSprintFieldIds,
+  fetchEstimateFieldIds,
   fetchBoards,
   fetchBoardIssues,
   fetchObjectives,
@@ -447,5 +501,6 @@ module.exports = {
   classifyJiraError,
   __resetSprintFieldIdsForTests: () => {
     cachedSprintFieldIds = null;
+    cachedEstimateFieldIds = null;
   },
 };

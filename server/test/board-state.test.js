@@ -56,7 +56,7 @@ test('GET /api/board-state returns sanitized defaults for unknown projects', asy
     },
     checklists: {},
     table: {
-      columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'],
+      columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'acceptance'],
       sortBy: '',
       sortDir: 'asc',
     },
@@ -172,7 +172,7 @@ test('PUT /api/board-state persists only supported board state fields', async (t
       },
     },
     table: {
-      columnOrder: ['status', 'ticket', 'summary', 'product', 'objective', 'points', 'priority', 'ready', 'done', 'acceptance'],
+      columnOrder: ['status', 'ticket', 'summary', 'product', 'objective', 'points', 'priority', 'acceptance'],
       sortBy: 'priority',
       sortDir: 'desc',
     },

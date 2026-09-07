@@ -342,9 +342,7 @@ html, body {
 }
 
 .sprint-board-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 12px;
+  display: block;
   min-height: 0;
   flex: 1;
 }
@@ -354,15 +352,6 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.workflow-sidebar {
-  min-width: 0;
-}
-
-.workflow-sidebar .workflow-panel {
-  position: sticky;
-  top: 0;
 }
 
 .tl-search {
@@ -450,16 +439,6 @@ html, body {
   gap: 12px;
 }
 
-.workflow-panel--embedded {
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.workflow-panel--embedded .workflow-panel-header {
-  display: none;
-}
-
 .workflow-panel-header {
   display: flex;
   justify-content: space-between;
@@ -543,35 +522,9 @@ html, body {
   flex-wrap: wrap;
 }
 
-.definition-toggle {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.definition-toggle-icon {
-  display: inline-flex;
-  color: var(--muted);
-}
-
 .checklist-grid {
   display: grid;
   gap: 8px;
-  margin-top: 10px;
-}
-
-.ticket-checklist-sidebar-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   margin-top: 10px;
 }
 
@@ -896,11 +849,11 @@ html, body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.62);
-  z-index: 10000;
+  z-index: 13000;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: calc(24px + var(--app-topbar-height, 0px)) 24px 24px;
 }
 
 .ticket-modal {
@@ -1382,10 +1335,6 @@ html, body {
     align-items: stretch;
   }
 
-  .sprint-board-layout {
-    grid-template-columns: 1fr;
-  }
-
   .js-form-grid {
     grid-template-columns: 1fr;
   }
@@ -1397,6 +1346,6 @@ html, body {
   }
 
   .ticket-modal-overlay {
-    padding: 12px;
+    padding: calc(12px + var(--app-topbar-height, 0px)) 12px 12px;
   }
 }

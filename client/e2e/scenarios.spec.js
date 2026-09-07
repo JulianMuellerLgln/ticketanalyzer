@@ -292,7 +292,7 @@ test('Szenario 9: Ticketdetails anzeigen', async ({ page }) => {
 
   await page.screenshot({ path: 'e2e/screenshots/09a_ticket_modal.png', fullPage: true });
 
-  await page.locator('.ticket-modal .icon-btn').click();
+  await page.keyboard.press('Escape');
   await expect(page.locator('.ticket-modal')).not.toBeVisible();
 });
 
@@ -308,9 +308,7 @@ test('Szenario 12: Arbeitsmodi und Scrum Guide', async ({ page }) => {
   await page.getByRole('button', { name: 'Planning' }).click();
   await expect(page.getByText('Planning focus')).toBeVisible();
   await expect(page.getByText('Sprint goal draft')).toBeVisible();
-  await expect(page.getByText('Definition of Ready / Done')).toBeVisible();
-  await expect(page.locator('.workflow-sidebar').getByRole('button', { name: 'Definition of Ready' })).toBeVisible();
-  await expect(page.locator('.workflow-sidebar').getByRole('button', { name: 'Definition of Done' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'DoR / DoD' })).toBeVisible();
   await expect(page.getByText('Typical team load', { exact: true })).toBeVisible();
 
   const goalDraft = page.locator('.workflow-textarea').first();
@@ -328,7 +326,7 @@ test('Szenario 12: Arbeitsmodi und Scrum Guide', async ({ page }) => {
   await expect(page.getByText('Scrum Guide essentials')).toBeVisible();
   await expect(page.getByText('Commitment')).toBeVisible();
   await expect(page.getByText('What Sprint Planning means')).toBeVisible();
-  await page.locator('.scrum-guide-modal .icon-btn').click();
+  await page.keyboard.press('Escape');
   await expect(page.getByText('Scrum Guide essentials')).toHaveCount(0);
 
   await page.screenshot({ path: 'e2e/screenshots/12a_modes_and_guide.png', fullPage: true });
@@ -403,8 +401,6 @@ test('Szenario 10: Persistierte Board-Ansicht laden', async ({ page }) => {
   await expect(page.locator('.sprint-section-title').filter({ hasText: /^Archive$/ })).toHaveCount(0);
   await expect(sprintBacklog.getByText('Fix dashboard crash on mobile')).toBeVisible();
   await expect(page.locator('.ticket-table-row', { hasText: 'Improve search performance' })).toHaveCount(0);
-  await expect(sprintBacklog.getByText('2/6')).toBeVisible();
-  await expect(sprintBacklog.getByText('1/5')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/10a_persisted_board.png', fullPage: true });
 });
@@ -562,25 +558,26 @@ test('Szenario 15: Tabellen-Spalten sortierbar und verschiebbar', async ({ page 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Szenario 16: Rechte DoR/DoD-Seitenleiste ist einklappbar und pro Ticket nutzbar
+// Szenario 16: DoR/DoD Modal + Checklist nur in Ticketdetails
 // ─────────────────────────────────────────────────────────────────────────────
-test('Szenario 16: DoR/DoD Sidebar ist ausklappbar und pro Ticket abhakbar', async ({ page }) => {
+test('Szenario 16: DoR/DoD Modal und Ticketdetails-Checklist', async ({ page }) => {
   const captures = {};
   await setupMocks(page, { captures });
   await page.goto('/');
   await projectSelect(page).selectOption('AXON');
   await page.waitForTimeout(400);
 
-  const sidebar = page.locator('.workflow-sidebar');
-  await expect(sidebar).toBeVisible();
-  await expect(sidebar.getByText('Definition of Ready / Done')).toBeVisible();
-  await expect(sidebar.getByText('Clear title and understandable description are present.')).toHaveCount(0);
+  await page.getByRole('button', { name: 'DoR / DoD' }).click();
+  const standardsModal = page.locator('.ticket-modal.scrum-guide-modal');
+  await expect(standardsModal).toBeVisible();
+  await expect(standardsModal.getByText('Definition of Ready', { exact: true })).toBeVisible();
+  await expect(standardsModal.getByText('Definition of Done', { exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(standardsModal).toHaveCount(0);
 
-  await sidebar.getByRole('button', { name: 'Definition of Ready' }).click();
-  await expect(sidebar.getByText('Clear title and understandable description are present.')).toBeVisible();
-
-  await sidebar.locator('select.input').selectOption('AXON-2');
-  const componentCheckbox = sidebar.getByLabel('Product/component is assigned.');
+  await page.locator('.ticket-table-row', { hasText: 'Fix dashboard crash on mobile' }).click();
+  const ticketModal = page.locator('.ticket-modal');
+  const componentCheckbox = ticketModal.getByLabel('Product/component is assigned.');
   await componentCheckbox.check();
 
   await expect.poll(() => captures.boardState?.checklists?.['AXON-2']?.ready?.component).toBe(true);

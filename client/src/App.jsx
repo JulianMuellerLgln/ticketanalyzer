@@ -11,6 +11,7 @@ import IdeaEvaluator from './components/IdeaEvaluator';
 import Roadmap from './components/Roadmap';
 import JiraSync from './components/JiraSync';
 import ScrumGuideModal from './components/ScrumGuideModal';
+import TeamStandardsModal from './components/TeamStandardsModal';
 import MiddleScrollArea from './components/MiddleScrollArea';
 
 const LLM_MODEL_STORAGE_KEY = 'ticketanalyzer.llmModel';
@@ -40,6 +41,7 @@ export default function App() {
   const t = i18n[lang];
   const [workflowMode, setWorkflowMode] = useState('daily');
   const [showScrumGuide, setShowScrumGuide] = useState(false);
+  const [showTeamStandards, setShowTeamStandards] = useState(false);
 
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState('');
@@ -236,6 +238,15 @@ export default function App() {
 
             <button
               className="btn-icon"
+              onClick={() => setShowTeamStandards(true)}
+              title={t.teamStandardsTitle}
+              type="button"
+            >
+              {t.teamStandardsButton}
+            </button>
+
+            <button
+              className="btn-icon"
               onClick={() => setShowScrumGuide(true)}
               title={t.scrumGuideTitle}
               type="button"
@@ -294,6 +305,7 @@ export default function App() {
       </div>
 
       <ScrumGuideModal open={showScrumGuide} onClose={() => setShowScrumGuide(false)} t={t} />
+      <TeamStandardsModal open={showTeamStandards} onClose={() => setShowTeamStandards(false)} t={t} />
     </div>
   );
 }

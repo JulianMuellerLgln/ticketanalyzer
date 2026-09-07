@@ -27,7 +27,7 @@ app.use(express.json());
 // In-memory cache
 const cache = { projects: null, issues: {}, lastRefresh: null };
 const BOARD_STATE_FILE = process.env.BOARD_STATE_FILE || path.join(__dirname, 'data', 'board-state.json');
-const TABLE_COLUMNS = ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'ready', 'done', 'acceptance'];
+const TABLE_COLUMNS = ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'acceptance'];
 
 function isValidProjectKey(projectKey) {
   return /^[A-Z][A-Z0-9]+$/.test(projectKey);

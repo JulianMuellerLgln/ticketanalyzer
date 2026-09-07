@@ -3,7 +3,9 @@ const test = require('node:test');
 
 const {
   DEFAULT_SPRINT_FIELD_IDS,
+  DEFAULT_ESTIMATE_FIELD_IDS,
   fetchIssues,
+  fetchEstimateFieldIds,
   fetchSprintFieldIds,
   pickObjectiveBoard,
   __resetSprintFieldIdsForTests,
@@ -40,23 +42,27 @@ test('fetchIssues includes discovered sprint fields in Jira search', async () =>
         return {
           data: [
             { id: 'customfield_12345', schema: { custom: 'com.pyxis.greenhopper.jira:gh-sprint' } },
+            { id: 'customfield_99999', name: 'Story point estimate', schema: { custom: 'com.atlassian.jira.plugin.system.customfieldtypes:float' } },
           ],
         };
       }
       if (route === '/search') {
-        return { data: { issues: [{ key: 'AXON-1' }] } };
+        return { data: { issues: [{ key: 'AXON-1', fields: { customfield_99999: 8 } }] } };
       }
       throw new Error(`Unexpected route: ${route}`);
     },
   };
 
   const issues = await fetchIssues(client, 'AXON');
-  const requestedFields = calls[1].options.params.fields.split(',');
+  const searchCall = calls.find((call) => call.route === '/search');
+  const requestedFields = searchCall.options.params.fields.split(',');
 
-  assert.deepEqual(issues, [{ key: 'AXON-1' }]);
+  assert.equal(issues[0].fields.__storyPoints, 8);
+  assert.equal(issues[0].fields.__storyPointFieldId, 'customfield_99999');
   assert.ok(requestedFields.includes('customfield_12345'));
+  assert.ok(requestedFields.includes('customfield_99999'));
   assert.ok(requestedFields.includes('duedate'));
-  assert.equal(calls[1].options.params.jql, 'project = AXON ORDER BY updated DESC');
+  assert.equal(searchCall.options.params.jql, 'project = AXON ORDER BY updated DESC');
 });
 
 test('fetchIssues falls back to default sprint fields when field discovery fails', async () => {
@@ -74,8 +80,10 @@ test('fetchIssues falls back to default sprint fields when field discovery fails
 
   await fetchIssues(client, 'AXON');
   const sprintFieldIds = await fetchSprintFieldIds(client);
+  const estimateFieldIds = await fetchEstimateFieldIds(client);
 
   assert.deepEqual(sprintFieldIds, DEFAULT_SPRINT_FIELD_IDS);
+  assert.deepEqual(estimateFieldIds, DEFAULT_ESTIMATE_FIELD_IDS);
 });
 
 test('fetchIssues rejects invalid project keys before calling Jira', async () => {
