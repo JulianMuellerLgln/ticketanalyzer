@@ -804,7 +804,10 @@ html, body {
 }
 
 .ticket-cell {
+  display: block;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .ticket-table-summary,
@@ -814,6 +817,8 @@ html, body {
 .ticket-table-priority,
 .ticket-table-progress,
 .ticket-table-points {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
