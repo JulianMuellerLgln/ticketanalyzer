@@ -48,6 +48,7 @@ export default function App() {
   const [issues, setIssues] = useState([]);
   const [lastRefresh, setLastRefresh] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingProjectIssues, setLoadingProjectIssues] = useState(false);
   const [jiraOk, setJiraOk] = useState(false);
   const [jiraBaseUrl, setJiraBaseUrl] = useState('');
 
@@ -106,6 +107,7 @@ export default function App() {
   const doRefresh = useCallback(async () => {
     if (!selectedProject) return;
     setRefreshing(true);
+    setLoadingProjectIssues(true);
     try {
       const res = await api.refresh(selectedProject);
       setLastRefresh(res.lastRefresh);
@@ -113,8 +115,10 @@ export default function App() {
       setIssues(data.issues || []);
       setJiraOk(true);
     } catch {
+      setIssues([]);
       setJiraOk(false);
     } finally {
+      setLoadingProjectIssues(false);
       setRefreshing(false);
     }
   }, [selectedProject]);
@@ -128,15 +132,22 @@ export default function App() {
 
   async function selectProject(key) {
     setSelectedProject(key);
-    setIssues([]);
-    if (!key) return;
+    if (!key) {
+      setIssues([]);
+      setLoadingProjectIssues(false);
+      return;
+    }
+    setLoadingProjectIssues(true);
     try {
       const data = await api.issues(key);
       setIssues(data.issues || []);
       setLastRefresh(data.lastRefresh);
       setJiraOk(true);
     } catch {
+      setIssues([]);
       setJiraOk(false);
+    } finally {
+      setLoadingProjectIssues(false);
     }
   }
 
@@ -164,6 +175,8 @@ export default function App() {
           jiraOk={jiraOk}
           projectCount={projects.length}
           issueCount={issues.length}
+          selectedProject={selectedProject}
+          loadingProjectIssues={loadingProjectIssues}
           lastRefresh={lastRefresh}
           t={t}
         />

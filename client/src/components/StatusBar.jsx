@@ -11,7 +11,17 @@ const dot = (ok) => ({
   boxShadow: ok ? '0 0 6px #22c55e' : 'none',
 });
 
-export default function StatusBar({ llm, selectedModel, jiraOk, projectCount, issueCount, lastRefresh, t }) {
+export default function StatusBar({
+  llm,
+  selectedModel,
+  jiraOk,
+  projectCount,
+  issueCount,
+  selectedProject,
+  loadingProjectIssues,
+  lastRefresh,
+  t,
+}) {
   return (
     <div className="statusbar">
       <span className="statusbar-brand">
@@ -43,7 +53,11 @@ export default function StatusBar({ llm, selectedModel, jiraOk, projectCount, is
           <span style={dot(jiraOk)} />
           {jiraOk ? t.jiraConnected : t.jiraOffline}
           {jiraOk && projectCount != null && (
-            <span className="status-model"> · {projectCount}p {issueCount}t</span>
+            <span className="status-model">
+              {' · '}
+              {projectCount} {t.projectsLabel}
+              {selectedProject ? ` · ${loadingProjectIssues ? t.loading : issueCount} ${t.ticketsLabel}` : ''}
+            </span>
           )}
         </span>
 
