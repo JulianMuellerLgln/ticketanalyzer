@@ -200,21 +200,44 @@ Produce ONLY valid JSON with exactly this structure:
   "backlogRefinementCandidates": [
     {
       "key": "TICKET-123",
-      "reason": "why this should be refined now",
+      "problem": "why this ticket needs refinement now",
+      "suggestedAction": "specific refinement step",
+      "expectedImpact": "expected delivery improvement",
       "missing": ["acceptance criteria", "estimate", "owner"]
     }
   ],
   "suggestions": [
-    { "key": "TICKET-123", "text": "specific improvement" }
+    {
+      "key": "TICKET-123",
+      "problem": "observed delivery issue",
+      "suggestedAction": "specific improvement action",
+      "expectedImpact": "expected positive impact"
+    }
   ],
   "redundancies": [
-    { "keys": ["A-1", "A-2"], "reason": "overlap reason" }
+    {
+      "keys": ["A-1", "A-2"],
+      "problem": "where overlap exists",
+      "suggestedAction": "merge, close, or split proposal",
+      "expectedImpact": "expected reduction in waste or confusion"
+    }
   ],
   "gaps": [
-    { "text": "important missing information" }
+    {
+      "key": "TICKET-123",
+      "problem": "important missing backlog or delivery concern",
+      "suggestedAction": "ticket to add or detail to capture",
+      "expectedImpact": "expected risk reduction or delivery gain"
+    }
   ],
   "slowTickets": [
-    { "key": "TICKET-123", "daysOpen": number, "note": "why slow and what to do" }
+    {
+      "key": "TICKET-123",
+      "daysOpen": number,
+      "problem": "why it is slow or stalled",
+      "suggestedAction": "next concrete step",
+      "expectedImpact": "expected acceleration or risk reduction"
+    }
   ]
 }
 
@@ -225,6 +248,7 @@ Rules for quality:
 - If a finding has no valid key match, set key to null and still provide the textual finding.
 - For planned vs done, infer "planned" from available signals (sprint field, fixVersion, dueDate, status timeline). If uncertain, keep confidence caveats explicit.
 - backlogRefinementCandidates must prioritize unclear tickets (vague summary/description, missing estimate, unclear owner, missing acceptance criteria, stale updates).
+- For suggestions, gaps, slowTickets, redundancies, and backlogRefinementCandidates, always use problem + suggestedAction + expectedImpact.
 - Keep every text concise and actionable.
 
 Language rule:
@@ -238,28 +262,49 @@ function focusedAnalysisTemplate(focus) {
   if (focus === 'redundancies') {
     return `{
   "redundancies": [
-    { "keys": ["A-1", "A-2"], "reason": "overlap reason" }
+    {
+      "keys": ["A-1", "A-2"],
+      "problem": "where overlap exists",
+      "suggestedAction": "merge, close, or split proposal",
+      "expectedImpact": "expected reduction in waste or confusion"
+    }
   ]
 }`;
   }
   if (focus === 'gaps') {
     return `{
   "gaps": [
-    { "text": "important missing information" }
+    {
+      "key": "TICKET-123",
+      "problem": "important missing backlog or delivery concern",
+      "suggestedAction": "ticket to add or detail to capture",
+      "expectedImpact": "expected risk reduction or delivery gain"
+    }
   ]
 }`;
   }
   if (focus === 'suggestions') {
     return `{
   "suggestions": [
-    { "key": "TICKET-123", "text": "specific improvement" }
+    {
+      "key": "TICKET-123",
+      "problem": "observed delivery issue",
+      "suggestedAction": "specific improvement action",
+      "expectedImpact": "expected positive impact"
+    }
   ]
 }`;
   }
   if (focus === 'slowTickets') {
     return `{
   "slowTickets": [
-    { "key": "TICKET-123", "daysOpen": number, "note": "why slow and what to do" }
+    {
+      "key": "TICKET-123",
+      "daysOpen": number,
+      "problem": "why it is slow or stalled",
+      "suggestedAction": "next concrete step",
+      "expectedImpact": "expected acceleration or risk reduction"
+    }
   ]
 }`;
   }
@@ -268,7 +313,9 @@ function focusedAnalysisTemplate(focus) {
   "backlogRefinementCandidates": [
     {
       "key": "TICKET-123",
-      "reason": "why this should be refined now",
+      "problem": "why this ticket needs refinement now",
+      "suggestedAction": "specific refinement step",
+      "expectedImpact": "expected delivery improvement",
       "missing": ["acceptance criteria", "estimate", "owner"]
     }
   ]
@@ -281,19 +328,19 @@ function focusedAnalysisTemplate(focus) {
 
 function focusedAnalysisInstructions(focus) {
   if (focus === 'redundancies') {
-    return 'Find semantically overlapping or duplicate tickets across the FULL dataset. Review all tickets, not just a sample. Only return high-confidence overlaps.';
+    return 'Find semantically overlapping or duplicate tickets across the FULL dataset. Review all tickets, not just a sample. Only return high-confidence overlaps. For every overlap, provide problem, suggestedAction, and expectedImpact.';
   }
   if (focus === 'gaps') {
-    return 'Review the FULL dataset and identify missing backlog or delivery concerns that should exist but are not represented well enough.';
+    return 'Review the FULL dataset and identify missing backlog or delivery concerns that should exist but are not represented well enough. For every finding, provide problem, suggestedAction, and expectedImpact.';
   }
   if (focus === 'suggestions') {
-    return 'Review the FULL dataset and return the most actionable delivery suggestions.';
+    return 'Review the FULL dataset and return the most actionable delivery suggestions. For every suggestion, provide problem, suggestedAction, and expectedImpact.';
   }
   if (focus === 'slowTickets') {
-    return 'Review the FULL dataset and flag tickets that appear stalled, aging, or delivery-risky.';
+    return 'Review the FULL dataset and flag tickets that appear stalled, aging, or delivery-risky. For every ticket, provide problem, suggestedAction, and expectedImpact.';
   }
   if (focus === 'backlogRefinementCandidates') {
-    return 'Review the FULL dataset and identify the tickets most in need of refinement.';
+    return 'Review the FULL dataset and identify the tickets most in need of refinement. For every ticket, provide problem, suggestedAction, and expectedImpact.';
   }
   return 'Review the FULL dataset and summarize the highest-value findings.';
 }

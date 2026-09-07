@@ -1,4 +1,4 @@
-# GeoSprint Jira Radar — Geo IT delivery cockpit
+# LGLN Jiradar — Geo IT delivery cockpit
 
 Draggable dashboard for Geo IT product and delivery work. Connects to Jira Data Center and a local Ollama LLM.
 

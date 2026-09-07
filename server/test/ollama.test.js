@@ -56,4 +56,6 @@ test('buildFocusedAnalysisPrompt includes the full ticket set for focused analys
   assert.match(prompt, /AXON-1/);
   assert.match(prompt, /AXON-2/);
   assert.match(prompt, /100% ticket coverage/);
+  assert.match(prompt, /suggestedAction/);
+  assert.match(prompt, /expectedImpact/);
 });

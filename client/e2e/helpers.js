@@ -3,6 +3,10 @@
  * Each mock can be overridden by passing partial overrides.
  */
 export async function setupMocks(page, overrides = {}) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('ticketanalyzer.lang', 'en');
+  });
+
   const defaults = {
     llmHealth: {
       online: true,
@@ -64,6 +68,80 @@ export async function setupMocks(page, overrides = {}) {
         },
       ],
     },
+    agileHive: {
+      projectKey: 'AXON',
+      methodology: 'SCRUM',
+      interval: {
+        id: 199,
+        name: '2026-Q3',
+        startDate: '2026-06-15T00:00:00.000Z',
+        endDate: '2026-09-04T00:00:00.000Z',
+        artProjectKey: 'ART-1',
+        strategy: 'latest_completed',
+      },
+      metrics: {
+        spPerDay: 1.92,
+        velocity: 50,
+        spBurned: { progress: 87, total: 136, percent: 64 },
+        daysPassed: { progress: 81, total: 81, percent: 100 },
+        businessValue: { progress: 0, total: 0, percent: 0 },
+        loadVsCap: { progress: 136, total: 0, percent: 136 },
+      },
+      sprintTrend: {
+        items: [
+          {
+            id: 197,
+            name: '2026-Q1',
+            startDate: '2025-12-01T00:00:00.000Z',
+            endDate: '2026-03-01T00:00:00.000Z',
+            metrics: {
+              velocity: 41,
+              spPerDay: 1.52,
+              spBurned: { progress: 54, total: 100, percent: 54 },
+              loadVsCap: { progress: 111, total: 0, percent: 111 },
+            },
+          },
+          {
+            id: 198,
+            name: '2026-Q2',
+            startDate: '2026-03-01T00:00:00.000Z',
+            endDate: '2026-06-01T00:00:00.000Z',
+            metrics: {
+              velocity: 46,
+              spPerDay: 1.68,
+              spBurned: { progress: 62, total: 100, percent: 62 },
+              loadVsCap: { progress: 101, total: 0, percent: 101 },
+            },
+          },
+          {
+            id: 199,
+            name: '2026-Q3',
+            startDate: '2026-06-15T00:00:00.000Z',
+            endDate: '2026-09-04T00:00:00.000Z',
+            metrics: {
+              velocity: 50,
+              spPerDay: 1.92,
+              spBurned: { progress: 87, total: 136, percent: 64 },
+              loadVsCap: { progress: 136, total: 0, percent: 136 },
+            },
+          },
+        ],
+        averages: {
+          velocity: 45.7,
+          spPerDay: 1.71,
+          deliveredSp: 67.7,
+          completionRate: 60,
+          loadVsCap: 116,
+        },
+        trends: {
+          velocity: { direction: 'up', delta: 9 },
+          spPerDay: { direction: 'up', delta: 0.4 },
+          deliveredSp: { direction: 'up', delta: 33 },
+          completionRate: { direction: 'up', delta: 10 },
+          loadVsCap: { direction: 'up', delta: 25 },
+        },
+      },
+    },
     refineTicket: {
       refinedSummary: 'Implement secure OAuth2 login flow',
       refinedDescription: 'Provide OAuth2 login with clear failure handling and persistent session behavior for end users.',
@@ -105,6 +183,8 @@ export async function setupMocks(page, overrides = {}) {
             updated: new Date(Date.now() - 1 * 86400000).toISOString(),
             duedate: new Date(Date.now() + 5 * 86400000).toISOString(),
             customfield_10016: 5,
+            __projectId: 'PA-3 Viewer-Modernisierung',
+            __projectIdFieldId: 'customfield_77777',
             labels: ['auth', 'frontend'],
             components: [{ name: 'Portal UI' }],
             fixVersions: [{ name: '2026.09' }],
@@ -139,6 +219,8 @@ export async function setupMocks(page, overrides = {}) {
             description: 'Acceptance criteria: app should no longer crash on iOS Safari.',
             created: new Date(Date.now() - 12 * 86400000).toISOString(),
             customfield_10016: 3,
+            __projectId: 'PA-4 Smart.Mapping',
+            __projectIdFieldId: 'customfield_77777',
             labels: ['ios', 'self-service'],
           },
         },
@@ -151,6 +233,8 @@ export async function setupMocks(page, overrides = {}) {
             description: 'Theme switcher for user settings.',
             created: new Date(Date.now() - 30 * 86400000).toISOString(),
             customfield_10016: 8,
+            __projectId: 'PA-5 3D-Produktion',
+            __projectIdFieldId: 'customfield_77777',
             customfield_10005: [
               {
                 id: 12,
@@ -174,6 +258,8 @@ export async function setupMocks(page, overrides = {}) {
             updated: new Date(Date.now() - 1 * 86400000).toISOString(),
             resolutiondate: new Date(Date.now() - 1 * 86400000).toISOString(),
             customfield_10016: 2,
+            __projectId: 'PA-6 Berechtigungskonzept Servicearchitekturen',
+            __projectIdFieldId: 'customfield_77777',
             customfield_10005: [
               {
                 id: 11,
@@ -191,18 +277,49 @@ export async function setupMocks(page, overrides = {}) {
     analyze: {
       summary: 'The backlog has 4 tickets. Login flow and mobile crash fix should be prioritized.',
       suggestions: [
-        { key: 'AXON-2', text: 'Mobile crash is critical – assign immediately.' },
-        { key: 'AXON-1', text: 'Login flow blocks onboarding. Prioritize for next sprint.' },
+        {
+          key: 'AXON-2',
+          problem: 'Mobile crash blocks reliable usage on key devices.',
+          suggestedAction: 'Assign an owner now, narrow scope to crash reproduction, and ship a hotfix first.',
+          expectedImpact: 'Restores app stability quickly and reduces urgent support load.',
+        },
+        {
+          key: 'AXON-1',
+          problem: 'Login flow still has unresolved blockers that delay onboarding delivery.',
+          suggestedAction: 'Prioritize this ticket in the active sprint and close open integration tasks first.',
+          expectedImpact: 'Unblocks onboarding and improves sprint goal predictability.',
+        },
       ],
       redundancies: [
-        { keys: ['AXON-3', 'AXON-4'], reason: 'Dark mode and search may share UI rework.' },
+        {
+          keys: ['AXON-3', 'AXON-4'],
+          problem: 'Dark mode and search changes overlap in shared UI surfaces.',
+          suggestedAction: 'Align both tickets under one UI change plan and remove duplicate implementation tasks.',
+          expectedImpact: 'Reduces duplicate effort and decreases merge conflicts.',
+        },
       ],
       gaps: [
-        { text: 'No ticket for automated testing coverage.' },
-        { text: 'Missing ticket for API rate limiting.' },
+        {
+          key: null,
+          problem: 'No ticket for automated testing coverage.',
+          suggestedAction: 'Create a dedicated ticket for regression test coverage across critical user flows.',
+          expectedImpact: 'Improves release confidence and lowers defect escape risk.',
+        },
+        {
+          key: null,
+          problem: 'Missing ticket for API rate limiting.',
+          suggestedAction: 'Add a backlog item for rate-limiting strategy and implementation.',
+          expectedImpact: 'Protects service stability under burst traffic.',
+        },
       ],
       slowTickets: [
-        { key: 'AXON-3', daysOpen: 30, note: 'Stalled in backlog, no activity.' },
+        {
+          key: 'AXON-3',
+          daysOpen: 30,
+          problem: 'Ticket is stalled in backlog with no recent activity.',
+          suggestedAction: 'Clarify owner and acceptance criteria, then re-plan into an upcoming sprint.',
+          expectedImpact: 'Removes aging backlog debt and restores delivery momentum.',
+        },
       ],
       coverage: {
         focus: 'overview',
@@ -214,31 +331,58 @@ export async function setupMocks(page, overrides = {}) {
     analyzeByFocus: {
       suggestions: {
         suggestions: [
-          { key: 'AXON-2', text: 'Mobile crash is critical – assign immediately.' },
+          {
+            key: 'AXON-2',
+            problem: 'Mobile crash blocks reliable usage on key devices.',
+            suggestedAction: 'Assign an owner now and ship a hotfix first.',
+            expectedImpact: 'Restores app stability quickly.',
+          },
         ],
         coverage: { focus: 'suggestions', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
       },
       redundancies: {
         redundancies: [
-          { keys: ['AXON-3', 'AXON-4'], reason: 'Dark mode and search may share UI rework.' },
+          {
+            keys: ['AXON-3', 'AXON-4'],
+            problem: 'Dark mode and search overlap in shared UI surfaces.',
+            suggestedAction: 'Align implementation plan and remove duplicate tasks.',
+            expectedImpact: 'Reduces duplicate work and merge conflicts.',
+          },
         ],
         coverage: { focus: 'redundancies', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
       },
       gaps: {
         gaps: [
-          { text: 'Missing ticket for API rate limiting.' },
+          {
+            key: null,
+            problem: 'Missing ticket for API rate limiting.',
+            suggestedAction: 'Create a backlog ticket for rate-limiting design and rollout.',
+            expectedImpact: 'Protects service stability during load spikes.',
+          },
         ],
         coverage: { focus: 'gaps', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
       },
       slowTickets: {
         slowTickets: [
-          { key: 'AXON-3', daysOpen: 30, note: 'Stalled in backlog, no activity.' },
+          {
+            key: 'AXON-3',
+            daysOpen: 30,
+            problem: 'Ticket has aged without delivery progress.',
+            suggestedAction: 'Assign ownership and split scope into deliverable increments.',
+            expectedImpact: 'Improves throughput and lowers carry-over risk.',
+          },
         ],
         coverage: { focus: 'slowTickets', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
       },
       backlogRefinementCandidates: {
         backlogRefinementCandidates: [
-          { key: 'AXON-2', reason: 'Needs clearer implementation details.', missing: ['owner'] },
+          {
+            key: 'AXON-2',
+            problem: 'Implementation details are still too vague for sprint commitment.',
+            suggestedAction: 'Define acceptance criteria and owner before planning.',
+            expectedImpact: 'Raises execution clarity and lowers spillover risk.',
+            missing: ['owner'],
+          },
         ],
         coverage: { focus: 'backlogRefinementCandidates', analyzedTickets: 4, usedAllTickets: true, sampledTickets: 4 },
       },
@@ -274,7 +418,7 @@ export async function setupMocks(page, overrides = {}) {
     showArchive: true,
     checklists: {},
     table: {
-      columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'acceptance'],
+    columnOrder: ['ticket', 'summary', 'product', 'projectId', 'objective', 'points', 'priority', 'status', 'acceptance'],
       sortBy: '',
       sortDir: 'asc',
     },
@@ -300,7 +444,7 @@ export async function setupMocks(page, overrides = {}) {
         showArchive: true,
         checklists: {},
         table: {
-          columnOrder: ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'acceptance'],
+          columnOrder: ['ticket', 'summary', 'product', 'projectId', 'objective', 'points', 'priority', 'status', 'acceptance'],
           sortBy: '',
           sortDir: 'asc',
         },
@@ -314,6 +458,9 @@ export async function setupMocks(page, overrides = {}) {
   );
   await page.route('**/api/jira/objectives', (route) =>
     route.fulfill({ json: mocks.objectiveContext })
+  );
+  await page.route('**/api/jira/agile-hive/**', (route) =>
+    route.fulfill({ json: mocks.agileHive })
   );
   await page.route('**/api/jira/issue-types/**', (route) =>
     route.fulfill({ json: mocks.issueTypes })

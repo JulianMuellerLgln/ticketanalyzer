@@ -42,16 +42,17 @@ const DEFAULT_DAILY_ADVICE_STATE = {
 const READY_CHECK_KEYS = ['titleDescription', 'acceptance', 'objective', 'component', 'estimate', 'dependencies'];
 const DONE_CHECK_KEYS = ['tests', 'docs', 'openPoints', 'acceptanceVerified', 'merged'];
 const DEFAULT_CHECKLISTS_STATE = {};
-const TABLE_COLUMN_IDS = ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'acceptance'];
+const TABLE_COLUMN_IDS = ['ticket', 'summary', 'product', 'projectId', 'objective', 'points', 'priority', 'status', 'acceptance'];
 const COLUMN_WIDTHS = {
-  ticket: '105px',
-  summary: 'minmax(220px, 1.7fr)',
-  product: 'minmax(135px, 1fr)',
-  objective: 'minmax(135px, 1fr)',
-  points: '70px',
-  priority: '95px',
-  status: '130px',
-  acceptance: 'minmax(180px, 1.1fr)',
+  ticket: '140px',
+  summary: '420px',
+  product: '290px',
+  projectId: '170px',
+  objective: '280px',
+  points: '80px',
+  priority: '110px',
+  status: '150px',
+  acceptance: '190px',
 };
 function defaultTableState() {
   return {
@@ -339,6 +340,10 @@ function storyPoints(ticket) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function projectIdValue(ticket) {
+  return String(ticket?.fields?.__projectId || '').trim();
+}
+
 function hasDependenciesHint(ticket) {
   const text = issueText(ticket);
   return /\b(blocked by|depends on|dependency|risk|question|open question|abhaeng|abhängig|offen)\b/i.test(text);
@@ -473,25 +478,29 @@ function createRefinementDraft(ticket) {
   };
 }
 
-function normalizeAcceptanceLines(value) {
+function normalizeAcceptanceEntries(value) {
   return String(value || '')
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => line.replace(/^[-*•]\s*/, ''));
+    .map((line) => line.replace(/^[-*•]\s*/, ''))
+    .map((line) => {
+      const checkbox = line.match(/^\[(x|X| )\]\s*(.+)$/);
+      if (checkbox) {
+        return {
+          checked: checkbox[1].toLowerCase() === 'x',
+          text: checkbox[2].trim(),
+        };
+      }
+      return { checked: false, text: line };
+    })
+    .filter((entry) => entry.text);
 }
 
-function buildDescriptionPayload(description, acceptanceCriteria) {
-  const sections = [];
-  const trimmedDescription = String(description || '').trim();
-  if (trimmedDescription) sections.push(trimmedDescription);
-
-  const criteria = normalizeAcceptanceLines(acceptanceCriteria);
-  if (criteria.length > 0) {
-    sections.push(`Acceptance Criteria\n${criteria.map((line) => `- ${line}`).join('\n')}`);
-  }
-
-  return sections.join('\n\n').trim();
+function buildAcceptanceCriteriaPayload(acceptanceCriteria) {
+  return normalizeAcceptanceEntries(acceptanceCriteria)
+    .map((entry) => `[${entry.checked ? 'x' : ' '}] ${entry.text}`)
+    .join('\n');
 }
 
 function normalizePlainUrlToken(token) {
@@ -684,7 +693,6 @@ function RefinementPanel({
   missingProductCount,
   t,
   onOpenTicket,
-  onGenerateRefinement,
 }) {
   return (
     <div className="workflow-panel">
@@ -731,10 +739,6 @@ function RefinementPanel({
             <div className="workflow-ticket-actions">
               <button className="btn-icon" type="button" onClick={() => onOpenTicket(ticket)}>
                 {t.details || t.ticket}
-              </button>
-              <button className="btn-primary" type="button" onClick={() => onGenerateRefinement(ticket)}>
-                <Sparkles size={12} />
-                {t.useLocalAi}
               </button>
             </div>
           </div>
@@ -1068,6 +1072,7 @@ function tableColumnDefs(t) {
     ticket: { id: 'ticket', label: t.ticket },
     summary: { id: 'summary', label: t.summary },
     product: { id: 'product', label: t.productOrComponent },
+    projectId: { id: 'projectId', label: t.projectId },
     objective: { id: 'objective', label: t.objective },
     points: { id: 'points', label: t.points },
     priority: { id: 'priority', label: t.priority },
@@ -1080,6 +1085,7 @@ function ticketSortValue(ticket, columnId, objectiveMatch) {
   if (columnId === 'ticket') return String(ticket.key || '');
   if (columnId === 'summary') return String(ticket.fields.summary || '');
   if (columnId === 'product') return primaryComponentName(ticket).toLowerCase();
+  if (columnId === 'projectId') return projectIdValue(ticket);
   if (columnId === 'objective') return String(objectiveMatch?.objectiveKey || '');
   if (columnId === 'points') return storyPoints(ticket);
   if (columnId === 'priority') return PRIORITY_RANK[priorityLabel(ticket)] || 0;
@@ -1102,10 +1108,18 @@ function renderTicketCell(columnId, { ticket, t, objectiveMatch, acceptanceMeta,
   if (columnId === 'product') {
     return <span className={`ticket-table-product${productName ? '' : ' ticket-table-product--missing'}`}>{productName || t.noProductAssigned}</span>;
   }
+  if (columnId === 'projectId') {
+    const projectId = projectIdValue(ticket);
+    return (
+      <span className={`ticket-table-project-id${projectId ? '' : ' ticket-table-objective--missing'}`}>
+        {projectId || '—'}
+      </span>
+    );
+  }
   if (columnId === 'objective') {
     return (
       <span className={`ticket-table-objective${objectiveMatch ? '' : ' ticket-table-objective--missing'}`} title={objectiveMatch?.objectiveSummary || t.noObjectiveMatch}>
-        {objectiveMatch ? objectiveMatch.objectiveKey : t.noObjectiveMatch}
+        {objectiveMatch?.objectiveSummary || t.noObjectiveMatch}
       </span>
     );
   }
@@ -1196,71 +1210,73 @@ function Section({
       </div>
 
       <div className="ticket-table">
-        <div className="ticket-table-header" style={{ gridTemplateColumns }}>
-          {columns.map((columnId) => (
-            <button
-              key={`col-header-${columnId}`}
-              type="button"
-              className="ticket-table-header-btn"
-              draggable
-              onClick={() => onSort?.(columnId)}
-              onDragStart={(event) => {
-                event.stopPropagation();
-                event.dataTransfer.setData('text/column-id', columnId);
-                event.dataTransfer.effectAllowed = 'move';
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = 'move';
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                const sourceColumn = event.dataTransfer.getData('text/column-id');
-                onReorderColumn?.(sourceColumn, columnId);
-              }}
-            >
-              <span>{defs[columnId]?.label || columnId}</span>
-              <span className="ticket-table-sort-indicator">
-                {sortBy === columnId ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
-              </span>
-            </button>
-          ))}
-        </div>
+        <div className="ticket-table-scroll">
+          <div className="ticket-table-header" style={{ gridTemplateColumns }}>
+            {columns.map((columnId) => (
+              <button
+                key={`col-header-${columnId}`}
+                type="button"
+                className="ticket-table-header-btn"
+                draggable
+                onClick={() => onSort?.(columnId)}
+                onDragStart={(event) => {
+                  event.stopPropagation();
+                  event.dataTransfer.setData('text/column-id', columnId);
+                  event.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const sourceColumn = event.dataTransfer.getData('text/column-id');
+                  onReorderColumn?.(sourceColumn, columnId);
+                }}
+              >
+                <span>{defs[columnId]?.label || columnId}</span>
+                <span className="ticket-table-sort-indicator">
+                  {sortBy === columnId ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+                </span>
+              </button>
+            ))}
+          </div>
 
-        <div className="ticket-table-body">
-          <AnimatePresence>
-            {tickets.length === 0 && (
-              <div className="muted sprint-empty">{t.noIssues}</div>
-            )}
-            {prepared.map(({ ticket, idx, objectiveMatch }) => {
-              const acceptanceMeta = getAcceptanceMeta(ticket.acceptanceScore, t);
-              const acceptanceTone = ACCEPTANCE_LEVELS[ticket.acceptanceScore] || ACCEPTANCE_LEVELS[0];
-              const productName = primaryComponentName(ticket);
-              return (
-                <motion.button
-                  key={safeIssueReactKey(ticket, idx)}
-                  type="button"
-                  className="ticket-table-row"
-                  style={{ gridTemplateColumns }}
-                  draggable
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ delay: idx * 0.015 }}
-                  onDragStart={(event) => onDragStart(event, ticket.key)}
-                  onDragEnd={onDragEnd}
-                  onClick={() => onOpenTicket(ticket)}
-                >
-                  {columns.map((columnId) => (
-                    <span key={`${ticket.key}-${columnId}`} className={`ticket-cell ticket-cell--${columnId}`}>
-                      {renderTicketCell(columnId, { ticket, t, objectiveMatch, acceptanceMeta, acceptanceTone, productName })}
-                    </span>
-                  ))}
-                </motion.button>
-              );
-            })}
-          </AnimatePresence>
+          <div className="ticket-table-body">
+            <AnimatePresence>
+              {tickets.length === 0 && (
+                <div className="muted sprint-empty">{t.noIssues}</div>
+              )}
+              {prepared.map(({ ticket, idx, objectiveMatch }) => {
+                const acceptanceMeta = getAcceptanceMeta(ticket.acceptanceScore, t);
+                const acceptanceTone = ACCEPTANCE_LEVELS[ticket.acceptanceScore] || ACCEPTANCE_LEVELS[0];
+                const productName = primaryComponentName(ticket);
+                return (
+                  <motion.button
+                    key={safeIssueReactKey(ticket, idx)}
+                    type="button"
+                    className="ticket-table-row"
+                    style={{ gridTemplateColumns }}
+                    draggable
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ delay: idx * 0.015 }}
+                    onDragStart={(event) => onDragStart(event, ticket.key)}
+                    onDragEnd={onDragEnd}
+                    onClick={() => onOpenTicket(ticket)}
+                  >
+                    {columns.map((columnId) => (
+                      <span key={`${ticket.key}-${columnId}`} className={`ticket-cell ticket-cell--${columnId}`}>
+                        {renderTicketCell(columnId, { ticket, t, objectiveMatch, acceptanceMeta, acceptanceTone, productName })}
+                      </span>
+                    ))}
+                  </motion.button>
+                );
+              })}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </div>
@@ -1602,7 +1618,13 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     try {
       const analysis = await api.analyze(projectKey, lang, llmModel);
       const planChanges = (analysis.suggestions || [])
-        .map((entry) => [entry?.key, entry?.text].filter(Boolean).join(': '))
+        .map((entry) => {
+          const problem = String(entry?.problem || entry?.text || '').trim();
+          const action = String(entry?.suggestedAction || '').trim();
+          const impact = String(entry?.expectedImpact || '').trim();
+          const detail = [problem, action && `=> ${action}`, impact && `(${impact})`].filter(Boolean).join(' ');
+          return [entry?.key, detail].filter(Boolean).join(': ');
+        })
         .filter(Boolean);
       const coordination = (analysis.sprintHealth?.followUps || [])
         .map((entry) => String(entry || '').trim())
@@ -1765,13 +1787,14 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
     setAiRefinement((previous) => ({ ...previous, saving: true, error: '', savedMessage: '' }));
     try {
       const selectedComponent = availableComponents.find((component) => component.name === refinementDraft.componentName);
+      const acceptanceCriteriaPayload = buildAcceptanceCriteriaPayload(refinementDraft.acceptanceCriteria);
       const fields = {
         summary: refinementDraft.summary.trim() || selectedTicket.fields.summary,
-        description: buildDescriptionPayload(refinementDraft.description, refinementDraft.acceptanceCriteria),
+        description: refinementDraft.description.trim(),
         components: selectedComponent ? [{ id: selectedComponent.id }] : [],
       };
 
-      await api.updateIssue(selectedTicket.key, fields);
+      await api.updateIssue(selectedTicket.key, fields, { acceptanceCriteria: acceptanceCriteriaPayload });
       setAiRefinement((previous) => ({ ...previous, saving: false, savedMessage: t.refinementApplied }));
       await onRefresh?.();
     } catch (e) {
@@ -1809,7 +1832,6 @@ export default function TicketList({ issues, projectKey, t, jiraBaseUrl, workflo
                 missingProductCount={tickets.filter((ticket) => !primaryComponentName(ticket) && !ticket.done).length}
                 t={t}
                 onOpenTicket={openTicket}
-                onGenerateRefinement={generateRefinement}
               />
             )}
 

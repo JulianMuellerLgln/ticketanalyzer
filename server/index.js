@@ -13,8 +13,11 @@ const {
   fetchProjectComponents,
   fetchIssueTypes,
   fetchCreateMeta,
+  fetchAcceptanceCriteriaFieldIds,
   createIssue,
   updateIssue,
+  buildAgileHiveClient,
+  fetchAgileHiveTeamMetrics,
   getJiraConfigStatus,
   classifyJiraError,
 } = require('./src/jira');
@@ -36,7 +39,7 @@ app.use(express.json());
 // In-memory cache
 const cache = { projects: null, issues: {}, lastRefresh: null };
 const BOARD_STATE_FILE = process.env.BOARD_STATE_FILE || path.join(__dirname, 'data', 'board-state.json');
-const TABLE_COLUMNS = ['ticket', 'summary', 'product', 'objective', 'points', 'priority', 'status', 'acceptance'];
+const TABLE_COLUMNS = ['ticket', 'summary', 'product', 'projectId', 'objective', 'points', 'priority', 'status', 'acceptance'];
 
 function isValidProjectKey(projectKey) {
   return /^[A-Z][A-Z0-9]+$/.test(projectKey);
@@ -196,6 +199,41 @@ function asText(v) {
   return String(v).trim();
 }
 
+function normalizeAcceptanceLines(value) {
+  return String(value || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[-*•]\s*/, ''));
+}
+
+function toAcceptanceChecklistText(value) {
+  const lines = normalizeAcceptanceLines(value);
+  return lines
+    .map((line) => {
+      const checkbox = line.match(/^\[(x|X| )\]\s*(.+)$/);
+      if (checkbox) {
+        const checked = checkbox[1].toLowerCase() === 'x';
+        const text = asText(checkbox[2]);
+        if (!text) return '';
+        return `[${checked ? 'x' : ' '}] ${text}`;
+      }
+      return `[ ] ${line}`;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function appendAcceptanceToDescription(description, acceptanceCriteria) {
+  const base = asText(description);
+  const checklist = toAcceptanceChecklistText(acceptanceCriteria);
+  if (!checklist) return base;
+  const sections = [];
+  if (base) sections.push(base);
+  sections.push(`Acceptance Criteria\n${checklist}`);
+  return sections.join('\n\n').trim();
+}
+
 function normalizeAnalysis(parsed, issues) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
 
@@ -203,6 +241,15 @@ function normalizeAnalysis(parsed, issues) {
   const normalizeKey = (k) => {
     const key = asText(k);
     return key && knownKeys.has(key) ? key : null;
+  };
+  const normalizeStructuredInsight = (entry, fallback = {}) => {
+    const fromEntry = entry && typeof entry === 'object' ? entry : {};
+    const problem = asText(fromEntry.problem || fallback.problem || fromEntry.text || fromEntry.reason || fromEntry.note);
+    return {
+      problem,
+      suggestedAction: asText(fromEntry.suggestedAction || fallback.suggestedAction),
+      expectedImpact: asText(fromEntry.expectedImpact || fallback.expectedImpact),
+    };
   };
 
   const out = { ...parsed };
@@ -234,7 +281,7 @@ function normalizeAnalysis(parsed, issues) {
   if (Array.isArray(out.suggestions)) {
     out.suggestions = out.suggestions.map((s) => ({
       key: normalizeKey(s?.key),
-      text: asText(s?.text),
+      ...normalizeStructuredInsight(s),
     }));
   }
 
@@ -242,14 +289,14 @@ function normalizeAnalysis(parsed, issues) {
     out.slowTickets = out.slowTickets.map((s) => ({
       key: normalizeKey(s?.key),
       daysOpen: Number.isFinite(Number(s?.daysOpen)) ? Number(s.daysOpen) : null,
-      note: asText(s?.note),
+      ...normalizeStructuredInsight(s),
     }));
   }
 
   if (Array.isArray(out.backlogRefinementCandidates)) {
     out.backlogRefinementCandidates = out.backlogRefinementCandidates.map((c) => ({
       key: normalizeKey(c?.key),
-      reason: asText(c?.reason),
+      ...normalizeStructuredInsight(c),
       missing: Array.isArray(c?.missing) ? c.missing.map((m) => asText(m)).filter(Boolean) : [],
     }));
   }
@@ -257,14 +304,17 @@ function normalizeAnalysis(parsed, issues) {
   if (Array.isArray(out.redundancies)) {
     out.redundancies = out.redundancies.map((r) => ({
       keys: Array.isArray(r?.keys) ? r.keys.map((k) => normalizeKey(k)).filter(Boolean) : [],
-      reason: asText(r?.reason),
+      ...normalizeStructuredInsight(r),
     }));
   }
 
   if (Array.isArray(out.gaps)) {
     out.gaps = out.gaps.map((g) => {
-      if (typeof g === 'string') return { text: asText(g) };
-      return { text: asText(g?.text) };
+      if (typeof g === 'string') return { key: null, ...normalizeStructuredInsight({ text: g }) };
+      return {
+        key: normalizeKey(g?.key),
+        ...normalizeStructuredInsight(g),
+      };
     });
   }
 
@@ -392,6 +442,38 @@ app.get('/api/jira/objectives', async (req, res) => {
   try {
     const result = await fetchObjectives();
     res.json(result);
+  } catch (e) {
+    const payload = jiraErrorPayload(e);
+    res.status(payload.status).json(payload.body);
+  }
+});
+
+app.get('/api/jira/agile-hive/:projectKey', async (req, res) => {
+  const { projectKey } = req.params;
+  if (!isValidProjectKey(projectKey)) {
+    return res.status(400).json({ error: 'Invalid project key' });
+  }
+  try {
+    const client = buildAgileHiveClient();
+    if (!client) {
+      const cfg = getJiraConfigStatus();
+      return res.status(500).json({ error: cfg.message, reason: cfg.reason });
+    }
+    const intervalIdText = asText(req.query.intervalId);
+    const intervalId = intervalIdText ? Number(intervalIdText) : null;
+    const historyCountText = asText(req.query.historyCount);
+    const historyCountNumber = historyCountText ? Number(historyCountText) : 3;
+    const methodology = asText(req.query.methodology) || 'SCRUM';
+    const jql = asText(req.query.jql);
+    const data = await fetchAgileHiveTeamMetrics(client, projectKey, {
+      intervalId: Number.isFinite(intervalId) ? intervalId : null,
+      historyCount: Number.isFinite(historyCountNumber) && historyCountNumber > 0
+        ? Math.min(12, Math.floor(historyCountNumber))
+        : 3,
+      methodology,
+      jql,
+    });
+    res.json(data);
   } catch (e) {
     const payload = jiraErrorPayload(e);
     res.status(payload.status).json(payload.body);
@@ -569,14 +651,28 @@ app.post('/api/jira/sync', async (req, res) => {
 
 app.put('/api/jira/issues/:issueKey', async (req, res) => {
   const { issueKey } = req.params;
-  const fields = req.body?.fields;
+  const rawFields = req.body?.fields;
+  const acceptanceCriteria = asText(req.body?.acceptanceCriteria);
+  const fields = rawFields && typeof rawFields === 'object' && !Array.isArray(rawFields)
+    ? { ...rawFields }
+    : null;
   if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
     return res.status(400).json({ error: 'fields object required' });
   }
   try {
     const client = getClient();
+    let acceptanceFieldId = null;
+    if (acceptanceCriteria) {
+      const acceptanceFieldIds = await fetchAcceptanceCriteriaFieldIds(client);
+      acceptanceFieldId = acceptanceFieldIds[0] || null;
+      if (acceptanceFieldId) {
+        fields[acceptanceFieldId] = toAcceptanceChecklistText(acceptanceCriteria);
+      } else {
+        fields.description = appendAcceptanceToDescription(fields.description, acceptanceCriteria);
+      }
+    }
     const result = await updateIssue(client, issueKey, fields);
-    res.json(result);
+    res.json({ ...result, acceptanceFieldId, acceptanceFallbackToDescription: Boolean(acceptanceCriteria && !acceptanceFieldId) });
   } catch (e) {
     const payload = jiraErrorPayload(e);
     res.status(payload.status).json(payload.body);

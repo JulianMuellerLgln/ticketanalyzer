@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cpu, Zap } from 'lucide-react';
+import { Cpu } from 'lucide-react';
 
 const dot = (ok) => ({
   width: 8,
@@ -31,7 +31,7 @@ export default function StatusBar({
   return (
     <div className="statusbar">
       <span className="statusbar-brand">
-        <Zap size={16} style={{ color: '#22c55e', marginRight: 6 }} />
+        <img src="/lgln.jpeg" alt={t.appName} className="statusbar-logo" />
         <strong>{t.appName}</strong>
         <span className="statusbar-sub">{t.subtitle}</span>
       </span>

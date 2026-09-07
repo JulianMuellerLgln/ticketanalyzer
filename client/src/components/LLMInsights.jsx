@@ -25,6 +25,31 @@ function LinkedText({ text, jiraBaseUrl }) {
   );
 }
 
+function InsightTriplet({ item, t, jiraBaseUrl }) {
+  return (
+    <div className="analysis-triplet">
+      {item?.problem && (
+        <div className="analysis-triplet-row">
+          <strong>{t.analysisProblem}:</strong>
+          <span><LinkedText text={item.problem} jiraBaseUrl={jiraBaseUrl} /></span>
+        </div>
+      )}
+      {item?.suggestedAction && (
+        <div className="analysis-triplet-row">
+          <strong>{t.analysisSuggestedAction}:</strong>
+          <span><LinkedText text={item.suggestedAction} jiraBaseUrl={jiraBaseUrl} /></span>
+        </div>
+      )}
+      {item?.expectedImpact && (
+        <div className="analysis-triplet-row">
+          <strong>{t.analysisExpectedImpact}:</strong>
+          <span><LinkedText text={item.expectedImpact} jiraBaseUrl={jiraBaseUrl} /></span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Section({ icon, label, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -174,7 +199,7 @@ export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseU
               {data.backlogRefinementCandidates.map((c, i) => (
                 <div key={`${c?.key || 'refine'}-${i}`} className="analysis-item">
                   {c?.key && <TicketLink ticketKey={c.key} baseUrl={jiraBaseUrl} className="ticket-key-sm" />}
-                  <span><LinkedText text={c?.reason || t.noData} jiraBaseUrl={jiraBaseUrl} /></span>
+                  <InsightTriplet item={c} t={t} jiraBaseUrl={jiraBaseUrl} />
                   {Array.isArray(c?.missing) && c.missing.length > 0 && (
                     <span className="muted">({c.missing.join(', ')})</span>
                   )}
@@ -186,9 +211,9 @@ export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseU
           {data.suggestions?.length > 0 && (
             <Section icon={<Lightbulb size={12} style={{ marginRight: 4, color: '#e53e3e' }} />} label={t.suggestions} defaultOpen>
               {data.suggestions.map((s, i) => (
-                <div key={`${s?.key || 'suggestion'}-${i}-${(s?.text || '').slice(0, 24)}`} className="analysis-item">
+                <div key={`${s?.key || 'suggestion'}-${i}-${(s?.problem || '').slice(0, 24)}`} className="analysis-item">
                   {s.key && <TicketLink ticketKey={s.key} baseUrl={jiraBaseUrl} className="ticket-key-sm" />}
-                  <span><LinkedText text={s.text} jiraBaseUrl={jiraBaseUrl} /></span>
+                  <InsightTriplet item={s} t={t} jiraBaseUrl={jiraBaseUrl} />
                 </div>
               ))}
             </Section>
@@ -206,7 +231,7 @@ export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseU
                       </span>
                     ))}
                   </span>
-                  <span><LinkedText text={r.reason} jiraBaseUrl={jiraBaseUrl} /></span>
+                  <InsightTriplet item={r} t={t} jiraBaseUrl={jiraBaseUrl} />
                 </div>
               ))}
             </Section>
@@ -215,8 +240,9 @@ export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseU
           {data.gaps?.length > 0 && (
             <Section icon={<AlertTriangle size={12} style={{ marginRight: 4, color: '#e53e3e' }} />} label={t.gaps}>
               {data.gaps.map((g, i) => (
-                <div key={`${(g?.text || g || 'gap').toString().slice(0, 24)}-${i}`} className="analysis-item">
-                  <LinkedText text={g.text || g} jiraBaseUrl={jiraBaseUrl} />
+                <div key={`${(g?.problem || 'gap').toString().slice(0, 24)}-${i}`} className="analysis-item">
+                  {g?.key && <TicketLink ticketKey={g.key} baseUrl={jiraBaseUrl} className="ticket-key-sm" />}
+                  <InsightTriplet item={g} t={t} jiraBaseUrl={jiraBaseUrl} />
                 </div>
               ))}
             </Section>
@@ -226,9 +252,9 @@ export default function LLMInsights({ projectKey, issueCount, t, lang, jiraBaseU
             <Section icon={<Clock size={12} style={{ marginRight: 4 }} />} label={t.slowTickets}>
               {data.slowTickets.map((s, i) => (
                 <div key={`${s?.key || 'slow'}-${i}`} className="analysis-item">
-                  <TicketLink ticketKey={s.key} baseUrl={jiraBaseUrl} className="ticket-key-sm" />
-                  <span className="muted">{s.daysOpen}d</span>
-                  <span><LinkedText text={s.note} jiraBaseUrl={jiraBaseUrl} /></span>
+                  {s?.key && <TicketLink ticketKey={s.key} baseUrl={jiraBaseUrl} className="ticket-key-sm" />}
+                  {Number.isFinite(s?.daysOpen) && <span className="muted">{s.daysOpen}d</span>}
+                  <InsightTriplet item={s} t={t} jiraBaseUrl={jiraBaseUrl} />
                 </div>
               ))}
             </Section>

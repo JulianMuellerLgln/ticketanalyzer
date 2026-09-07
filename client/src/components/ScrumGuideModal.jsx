@@ -33,8 +33,11 @@ export default function ScrumGuideModal({ open, onClose, t }) {
           <section className="guide-section">
             <h4>{t.scrumValuesTitle}</h4>
             <ul>
-              {t.scrumValues.map((value) => (
-                <li key={value}><strong>{value}</strong></li>
+              {t.scrumValueMeanings.map((entry) => (
+                <li key={entry.value}>
+                  <strong>{entry.value}</strong>
+                  <div className="guide-value-meaning">{entry.meaning}</div>
+                </li>
               ))}
             </ul>
           </section>

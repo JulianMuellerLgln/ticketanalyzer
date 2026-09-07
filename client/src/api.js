@@ -16,14 +16,16 @@ export const api = {
     axios.get(`${BASE}/jira/components/${encodeURIComponent(projectKey)}`).then((r) => r.data),
   jiraObjectives: () =>
     axios.get(`${BASE}/jira/objectives`).then((r) => r.data),
+  jiraAgileHive: (projectKey, options = {}) =>
+    axios.get(`${BASE}/jira/agile-hive/${encodeURIComponent(projectKey)}`, { params: options }).then((r) => r.data),
   jiraIssueTypes: (projectKey) =>
     axios.get(`${BASE}/jira/issue-types/${encodeURIComponent(projectKey)}`).then((r) => r.data),
   jiraCreateMeta: (projectKey, issueType) =>
     axios
       .get(`${BASE}/jira/create-meta/${encodeURIComponent(projectKey)}/${encodeURIComponent(issueType)}`)
       .then((r) => r.data),
-  updateIssue: (issueKey, fields) =>
-    axios.put(`${BASE}/jira/issues/${encodeURIComponent(issueKey)}`, { fields }).then((r) => r.data),
+  updateIssue: (issueKey, fields, options = {}) =>
+    axios.put(`${BASE}/jira/issues/${encodeURIComponent(issueKey)}`, { fields, ...options }).then((r) => r.data),
   llmHealth: () => axios.get(`${BASE}/llm/health`).then((r) => r.data),
   llmSmokeTest: (model) =>
     axios.post(`${BASE}/llm/smoke-test`, { model }).then((r) => r.data),

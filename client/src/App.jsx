@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, Globe, BookOpenText, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, Globe, BookOpenText, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 
 import { api } from './api';
 import { i18n } from './i18n';
@@ -12,9 +12,11 @@ import Roadmap from './components/Roadmap';
 import JiraSync from './components/JiraSync';
 import ScrumGuideModal from './components/ScrumGuideModal';
 import TeamStandardsModal from './components/TeamStandardsModal';
+import AgileHiveModal from './components/AgileHiveModal';
 import MiddleScrollArea from './components/MiddleScrollArea';
 
 const LLM_MODEL_STORAGE_KEY = 'ticketanalyzer.llmModel';
+const LANGUAGE_STORAGE_KEY = 'ticketanalyzer.lang';
 
 function Widget({ title, children, className = '', defaultCollapsed = false }) {
   const [expanded, setExpanded] = useState(false);
@@ -49,11 +51,12 @@ function Widget({ title, children, className = '', defaultCollapsed = false }) {
 }
 
 export default function App() {
-  const [lang, setLang] = useState('en');
-  const t = i18n[lang];
+  const [lang, setLang] = useState(() => localStorage.getItem(LANGUAGE_STORAGE_KEY) || 'de');
+  const t = i18n[lang] || i18n.de;
   const [workflowMode, setWorkflowMode] = useState('daily');
   const [showScrumGuide, setShowScrumGuide] = useState(false);
   const [showTeamStandards, setShowTeamStandards] = useState(false);
+  const [showAgileHive, setShowAgileHive] = useState(false);
 
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState('');
@@ -82,6 +85,12 @@ export default function App() {
       localStorage.setItem(LLM_MODEL_STORAGE_KEY, selectedModel);
     }
   }, [selectedModel]);
+
+  useEffect(() => {
+    if (lang) {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+    }
+  }, [lang]);
 
   useEffect(() => {
     setLlmSmoke({ loading: false, ok: null, response: '', error: '', model: '', durationMs: 0 });
@@ -313,6 +322,16 @@ export default function App() {
 
             <button
               className="btn-icon"
+              onClick={() => setShowAgileHive(true)}
+              title={t.agileHiveTitle}
+              type="button"
+            >
+              <BarChart3 size={14} />
+              {t.agileHiveButton}
+            </button>
+
+            <button
+              className="btn-icon"
               onClick={() => setShowTeamStandards(true)}
               title={t.teamStandardsTitle}
               type="button"
@@ -387,6 +406,12 @@ export default function App() {
 
       <ScrumGuideModal open={showScrumGuide} onClose={() => setShowScrumGuide(false)} t={t} />
       <TeamStandardsModal open={showTeamStandards} onClose={() => setShowTeamStandards(false)} t={t} />
+      <AgileHiveModal
+        open={showAgileHive}
+        onClose={() => setShowAgileHive(false)}
+        t={t}
+        projectKey={selectedProject}
+      />
     </div>
   );
 }

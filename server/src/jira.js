@@ -1,8 +1,25 @@
 const axios = require('axios');
 const DEFAULT_SPRINT_FIELD_IDS = ['customfield_10005', 'customfield_10020'];
 const DEFAULT_ESTIMATE_FIELD_IDS = ['customfield_10016'];
+const PROJECT_ID_FIELD_NAME_HINTS = [
+  'project id',
+  'projekt id',
+  'projekt-id',
+  'projektkennung',
+  'modernisierungsprojekt',
+  'modernisierung',
+  'pa-',
+];
+const ACCEPTANCE_FIELD_NAME_HINTS = [
+  'akzeptanzkriterien',
+  'akzeptanzkriterium',
+  'acceptance criteria',
+  'acceptance criterion',
+];
 let cachedSprintFieldIds = null;
 let cachedEstimateFieldIds = null;
+let cachedProjectIdFieldIds = null;
+let cachedAcceptanceFieldIds = null;
 
 function normalizeBaseUrl(raw) {
   const value = (raw || '').trim().replace(/\/$/, '');
@@ -299,6 +316,41 @@ function estimateFieldScore(field) {
   return score;
 }
 
+function projectIdFieldScore(field) {
+  const name = String(field?.name || '').trim().toLowerCase();
+  const schemaType = String(field?.schema?.type || '').toLowerCase();
+  const custom = String(field?.schema?.custom || '').toLowerCase();
+  if (!name) return 0;
+
+  let score = 0;
+  if (name === 'project id' || name === 'projekt-id' || name === 'projekt id') score += 240;
+  if (name.includes('projekt') && name.includes('id')) score += 140;
+  if (name.includes('project') && name.includes('id')) score += 120;
+  for (const hint of PROJECT_ID_FIELD_NAME_HINTS) {
+    if (name.includes(hint)) score += 40;
+  }
+  if (schemaType === 'string') score += 20;
+  if (schemaType === 'option') score += 30;
+  if (custom.includes('select')) score += 20;
+  return score;
+}
+
+function acceptanceFieldScore(field) {
+  const name = String(field?.name || '').trim().toLowerCase();
+  const schemaType = String(field?.schema?.type || '').toLowerCase();
+  const custom = String(field?.schema?.custom || '').toLowerCase();
+  if (!name) return 0;
+
+  let score = 0;
+  if (name === 'akzeptanzkriterien' || name === 'acceptance criteria') score += 220;
+  for (const hint of ACCEPTANCE_FIELD_NAME_HINTS) {
+    if (name.includes(hint)) score += 80;
+  }
+  if (schemaType === 'string') score += 20;
+  if (custom.includes('textarea')) score += 20;
+  return score;
+}
+
 async function fetchEstimateFieldIds(client) {
   if (Array.isArray(cachedEstimateFieldIds) && cachedEstimateFieldIds.length > 0) {
     return cachedEstimateFieldIds;
@@ -320,6 +372,55 @@ async function fetchEstimateFieldIds(client) {
   return cachedEstimateFieldIds;
 }
 
+async function fetchProjectIdFieldIds(client) {
+  if (Array.isArray(cachedProjectIdFieldIds) && cachedProjectIdFieldIds.length > 0) {
+    return cachedProjectIdFieldIds;
+  }
+
+  try {
+    const res = await client.get('/field');
+    const projectIdFields = (res.data || [])
+      .map((field) => ({ id: String(field?.id || '').trim(), score: projectIdFieldScore(field) }))
+      .filter((field) => field.id && field.score > 0)
+      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
+      .map((field) => field.id);
+    cachedProjectIdFieldIds = projectIdFields;
+  } catch {
+    cachedProjectIdFieldIds = [];
+  }
+
+  return cachedProjectIdFieldIds;
+}
+
+function valueToProjectIdText(value) {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  if (!value || typeof value !== 'object') return '';
+  const fromOption = String(value.value || value.name || value.key || value.id || '').trim();
+  if (fromOption) return fromOption;
+  return '';
+}
+
+async function fetchAcceptanceCriteriaFieldIds(client) {
+  if (Array.isArray(cachedAcceptanceFieldIds) && cachedAcceptanceFieldIds.length > 0) {
+    return cachedAcceptanceFieldIds;
+  }
+
+  try {
+    const res = await client.get('/field');
+    const acceptanceFields = (res.data || [])
+      .map((field) => ({ id: String(field?.id || '').trim(), score: acceptanceFieldScore(field) }))
+      .filter((field) => field.id && field.score > 0)
+      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
+      .map((field) => field.id);
+    cachedAcceptanceFieldIds = acceptanceFields;
+  } catch {
+    cachedAcceptanceFieldIds = [];
+  }
+
+  return cachedAcceptanceFieldIds;
+}
+
 function injectDerivedEstimate(issue, estimateFieldIds) {
   const fields = issue?.fields;
   if (!fields || typeof fields !== 'object') return issue;
@@ -336,13 +437,34 @@ function injectDerivedEstimate(issue, estimateFieldIds) {
   return issue;
 }
 
+function injectDerivedProjectId(issue, projectIdFieldIds) {
+  const fields = issue?.fields;
+  if (!fields || typeof fields !== 'object') return issue;
+  for (const fieldId of projectIdFieldIds || []) {
+    const rawValue = fields[fieldId];
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+    const first = values
+      .map((value) => valueToProjectIdText(value))
+      .find((value) => Boolean(value));
+    if (first) {
+      fields.__projectId = first;
+      fields.__projectIdFieldId = fieldId;
+      return issue;
+    }
+  }
+  fields.__projectId = '';
+  fields.__projectIdFieldId = '';
+  return issue;
+}
+
 async function fetchIssues(client, projectKey, maxResults = 100) {
   if (!/^[A-Z][A-Z0-9]+$/.test(projectKey)) {
     throw new Error(`Invalid project key: ${projectKey}`);
   }
   const sprintFieldIds = await fetchSprintFieldIds(client);
   const estimateFieldIds = await fetchEstimateFieldIds(client);
-  const dynamicFieldIds = [...new Set([...sprintFieldIds, ...estimateFieldIds])];
+  const projectIdFieldIds = await fetchProjectIdFieldIds(client);
+  const dynamicFieldIds = [...new Set([...sprintFieldIds, ...estimateFieldIds, ...projectIdFieldIds])];
   const requestedMaxResults = Number(maxResults);
   const pageSize = Number.isFinite(requestedMaxResults) && requestedMaxResults > 0
     ? Math.floor(requestedMaxResults)
@@ -368,7 +490,9 @@ async function fetchIssues(client, projectKey, maxResults = 100) {
       },
     });
     const batch = res.data?.issues || [];
-    allIssues.push(...batch.map((issue) => injectDerivedEstimate(issue, estimateFieldIds)));
+    allIssues.push(
+      ...batch.map((issue) => injectDerivedProjectId(injectDerivedEstimate(issue, estimateFieldIds), projectIdFieldIds))
+    );
     const reportedTotal = Number(res.data?.total);
     total = Number.isFinite(reportedTotal) && reportedTotal >= 0 ? reportedTotal : startAt + batch.length;
     if (batch.length === 0) break;
@@ -396,6 +520,240 @@ function buildAgileClient() {
     headers,
     timeout: 30000,
   });
+}
+
+function buildAgileHiveClient() {
+  const status = getJiraConfigStatus();
+  if (!status.ok) return null;
+
+  const headers = { 'Content-Type': 'application/json' };
+  const auth = status.authType === 'basic'
+    ? { username: process.env.JIRA_USER_EMAIL, password: process.env.JIRA_API_TOKEN }
+    : undefined;
+  if (status.authType === 'bearer') {
+    headers.Authorization = `Bearer ${process.env.JIRA_API_TOKEN}`;
+  }
+
+  return axios.create({
+    baseURL: `${status.normalizedBaseUrl}/rest/agilehive/latest`,
+    auth,
+    headers,
+    timeout: 30000,
+  });
+}
+
+function toNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function metricPercent(progress, total) {
+  const p = toNumber(progress);
+  const t = toNumber(total);
+  if (t > 0) return Math.round((p / t) * 100);
+  if (p > 0) return Math.round(p);
+  return 0;
+}
+
+function mapPiStatistics(piStatistics = {}) {
+  const stats = piStatistics || {};
+  const spBurned = stats.spBurned || {};
+  const daysPassed = stats.daysPassed || {};
+  const businessValue = stats.businessValue || {};
+  const loadVsCap = stats.loadVsCap || {};
+  return {
+    spPerDay: toNumber(stats.spPerDay),
+    velocity: toNumber(stats.averageVelocity),
+    spBurned: {
+      progress: toNumber(spBurned.progress),
+      total: toNumber(spBurned.total),
+      percent: metricPercent(spBurned.progress, spBurned.total),
+    },
+    daysPassed: {
+      progress: toNumber(daysPassed.progress),
+      total: toNumber(daysPassed.total),
+      percent: metricPercent(daysPassed.progress, daysPassed.total),
+    },
+    businessValue: {
+      progress: toNumber(businessValue.progress),
+      total: toNumber(businessValue.total),
+      percent: metricPercent(businessValue.progress, businessValue.total),
+    },
+    loadVsCap: {
+      progress: toNumber(loadVsCap.progress),
+      total: toNumber(loadVsCap.total),
+      percent: metricPercent(loadVsCap.progress, loadVsCap.total),
+    },
+  };
+}
+
+function pickRecentCompletedIntervals(intervals = [], count = 3, now = new Date()) {
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(String(now));
+  const parsed = (Array.isArray(intervals) ? intervals : [])
+    .map((interval) => ({
+      ...interval,
+      id: Number(interval?.id),
+      endMs: Date.parse(interval?.endDate || ''),
+    }))
+    .filter((interval) => Number.isFinite(interval.id))
+    .sort((left, right) => {
+      const leftEnd = Number.isFinite(left.endMs) ? left.endMs : Number.MIN_SAFE_INTEGER;
+      const rightEnd = Number.isFinite(right.endMs) ? right.endMs : Number.MIN_SAFE_INTEGER;
+      if (rightEnd !== leftEnd) return rightEnd - leftEnd;
+      return right.id - left.id;
+    });
+  const completed = parsed.filter((interval) => Number.isFinite(interval.endMs) && interval.endMs <= nowMs);
+  const source = completed.length > 0 ? completed : parsed;
+  return source.slice(0, Math.max(1, Number(count) || 3));
+}
+
+function average(values = [], digits = 1) {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  const valid = values.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+  if (valid.length === 0) return 0;
+  const scale = 10 ** digits;
+  return Math.round((valid.reduce((sum, value) => sum + value, 0) / valid.length) * scale) / scale;
+}
+
+function trend(latest, earliest, epsilon = 0.5, digits = 1) {
+  const l = Number(latest);
+  const e = Number(earliest);
+  if (!Number.isFinite(l) || !Number.isFinite(e)) {
+    return { direction: 'flat', delta: 0 };
+  }
+  const scale = 10 ** digits;
+  const delta = Math.round((l - e) * scale) / scale;
+  if (Math.abs(delta) < epsilon) return { direction: 'flat', delta };
+  return { direction: delta > 0 ? 'up' : 'down', delta };
+}
+
+function pickPlanningInterval(intervals = [], now = new Date(), preferredIntervalId = null) {
+  const parsed = (Array.isArray(intervals) ? intervals : [])
+    .map((interval) => ({
+      ...interval,
+      id: Number(interval?.id),
+      startMs: Date.parse(interval?.startDate || ''),
+      endMs: Date.parse(interval?.endDate || ''),
+    }))
+    .filter((interval) => Number.isFinite(interval.id));
+  if (parsed.length === 0) return null;
+
+  if (preferredIntervalId != null) {
+    const preferred = parsed.find((entry) => entry.id === Number(preferredIntervalId));
+    if (preferred) return { interval: preferred, strategy: 'explicit' };
+  }
+
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(String(now));
+  const active = parsed
+    .filter((entry) => Number.isFinite(entry.startMs) && Number.isFinite(entry.endMs) && entry.startMs <= nowMs && nowMs <= entry.endMs)
+    .sort((left, right) => left.endMs - right.endMs);
+  if (active.length > 0) return { interval: active[0], strategy: 'active' };
+
+  const completed = parsed
+    .filter((entry) => Number.isFinite(entry.endMs) && entry.endMs <= nowMs)
+    .sort((left, right) => right.endMs - left.endMs);
+  if (completed.length > 0) return { interval: completed[0], strategy: 'latest_completed' };
+
+  const upcoming = parsed
+    .filter((entry) => Number.isFinite(entry.startMs) && entry.startMs > nowMs)
+    .sort((left, right) => left.startMs - right.startMs);
+  if (upcoming.length > 0) return { interval: upcoming[0], strategy: 'upcoming' };
+
+  return { interval: parsed[0], strategy: 'fallback_first' };
+}
+
+async function fetchAgileHiveTeamMetrics(client, projectKey, options = {}) {
+  if (!/^[A-Z][A-Z0-9]+$/.test(projectKey)) {
+    throw new Error(`Invalid project key: ${projectKey}`);
+  }
+  const {
+    intervalId = null,
+    jql = '',
+    methodology = 'SCRUM',
+    historyCount = 3,
+    now = new Date(),
+  } = options;
+  const intervalsResponse = await client.get('/planning-interval/intervals/for-project', { params: { projectKey } });
+  const intervals = intervalsResponse.data || [];
+  const selected = pickPlanningInterval(intervals, now, intervalId);
+  if (!selected?.interval) {
+    throw new Error(`No Agile Hive planning intervals found for project ${projectKey}`);
+  }
+
+  const reportPath = String(methodology).toUpperCase() === 'KANBAN'
+    ? '/reports/team/kanban'
+    : '/reports/team/scrum';
+  const reportResponse = await client.get(reportPath, {
+    params: {
+      projectKey,
+      planningIntervalId: String(selected.interval.id),
+      ...(jql ? { jql } : {}),
+    },
+  });
+  const metrics = mapPiStatistics(reportResponse.data?.piStatistics || {});
+  const recentIntervals = pickRecentCompletedIntervals(intervals, historyCount, now);
+  const historyMetricsByIntervalId = {
+    [selected.interval.id]: metrics,
+  };
+  const historyRows = [];
+  for (const interval of recentIntervals) {
+    if (!historyMetricsByIntervalId[interval.id]) {
+      const historyResponse = await client.get(reportPath, {
+        params: {
+          projectKey,
+          planningIntervalId: String(interval.id),
+          ...(jql ? { jql } : {}),
+        },
+      });
+      historyMetricsByIntervalId[interval.id] = mapPiStatistics(historyResponse.data?.piStatistics || {});
+    }
+    historyRows.push({
+      id: interval.id,
+      name: String(interval?.name || `Interval ${interval.id}`),
+      startDate: String(interval?.startDate || ''),
+      endDate: String(interval?.endDate || ''),
+      metrics: historyMetricsByIntervalId[interval.id],
+    });
+  }
+  const chronological = [...historyRows].sort((left, right) => {
+    const leftEnd = Date.parse(left.endDate || '');
+    const rightEnd = Date.parse(right.endDate || '');
+    if (Number.isFinite(leftEnd) && Number.isFinite(rightEnd) && leftEnd !== rightEnd) return leftEnd - rightEnd;
+    return left.id - right.id;
+  });
+  const earliest = chronological[0] || null;
+  const latest = chronological[chronological.length - 1] || null;
+
+  return {
+    projectKey,
+    methodology: String(methodology).toUpperCase() === 'KANBAN' ? 'KANBAN' : 'SCRUM',
+    interval: {
+      id: selected.interval.id,
+      name: String(selected.interval?.name || ''),
+      startDate: String(selected.interval?.startDate || ''),
+      endDate: String(selected.interval?.endDate || ''),
+      artProjectKey: String(selected.interval?.artProject?.key || ''),
+      strategy: selected.strategy,
+    },
+    metrics,
+    sprintTrend: {
+      items: chronological,
+      averages: {
+        velocity: average(chronological.map((entry) => entry.metrics.velocity)),
+        spPerDay: average(chronological.map((entry) => entry.metrics.spPerDay), 2),
+        deliveredSp: average(chronological.map((entry) => entry.metrics.spBurned.progress)),
+        completionRate: average(chronological.map((entry) => entry.metrics.spBurned.percent)),
+        loadVsCap: average(chronological.map((entry) => entry.metrics.loadVsCap.percent)),
+      },
+      trends: {
+        velocity: trend(latest?.metrics.velocity, earliest?.metrics.velocity),
+        spPerDay: trend(latest?.metrics.spPerDay, earliest?.metrics.spPerDay, 0.05, 2),
+        deliveredSp: trend(latest?.metrics.spBurned.progress, earliest?.metrics.spBurned.progress),
+        completionRate: trend(latest?.metrics.spBurned.percent, earliest?.metrics.spBurned.percent),
+        loadVsCap: trend(latest?.metrics.loadVsCap.percent, earliest?.metrics.loadVsCap.percent),
+      },
+    },
+  };
 }
 
 async function fetchBoards() {
@@ -507,9 +865,14 @@ module.exports = {
   fetchIssues,
   fetchSprintFieldIds,
   fetchEstimateFieldIds,
+  fetchProjectIdFieldIds,
+  fetchAcceptanceCriteriaFieldIds,
   fetchBoards,
   fetchBoardIssues,
   fetchObjectives,
+  buildAgileHiveClient,
+  fetchAgileHiveTeamMetrics,
+  pickPlanningInterval,
   fetchProjectComponents,
   fetchIssueTypes,
   fetchCreateMeta,
@@ -521,5 +884,7 @@ module.exports = {
   __resetSprintFieldIdsForTests: () => {
     cachedSprintFieldIds = null;
     cachedEstimateFieldIds = null;
+    cachedProjectIdFieldIds = null;
+    cachedAcceptanceFieldIds = null;
   },
 };

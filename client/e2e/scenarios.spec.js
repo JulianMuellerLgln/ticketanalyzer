@@ -54,7 +54,7 @@ test('Szenario 2: Projekt auswählen und Tickets laden', async ({ page }) => {
   await expect(page.locator('.ticket-table-row', { hasText: 'Fix dashboard crash on mobile' })).toBeVisible();
   await expect(page.locator('.ticket-table-row', { hasText: 'Add dark mode toggle' })).toBeVisible();
   await expect(page.locator('.ticket-table-row', { hasText: 'Improve search performance' })).toBeVisible();
-  await expect(page.locator('.ticket-table-row', { hasText: 'MOD-1' })).toBeVisible();
+  await expect(page.locator('.ticket-table-row', { hasText: 'PA-3 Viewer-Modernisierung' })).toBeVisible();
   await expect(page.getByText('5 · well defined')).toBeVisible();
   await expect(page.getByText('1 · ok')).toBeVisible();
   await expect(page.locator('.ticket-table-acceptance', { hasText: '0 · missing' })).toHaveCount(2);
@@ -102,7 +102,7 @@ test('Szenario 3: LLM-Analyse starten', async ({ page }) => {
 
   // Suggestions-Sektion soll aufgeklappt sein
   await expect(page.locator('.insights-focus-actions').getByRole('button', { name: 'Suggestions' })).toBeVisible();
-  await expect(page.getByText('Mobile crash is critical')).toBeVisible();
+  await expect(page.getByText('Mobile crash blocks reliable usage')).toBeVisible();
 
   await page.screenshot({ path: 'e2e/screenshots/03a_llm_analysis.png', fullPage: true });
 
@@ -234,7 +234,7 @@ test('Szenario 7: Sprache umschalten (EN → DE)', async ({ page }) => {
   await page.waitForTimeout(300);
 
   // Deutsche Texte sollen erscheinen
-  await expect(page.getByText('Geo-IT-Liefercockpit fuer agile Jira-Teams')).toBeVisible();
+  await expect(page.getByText('Geo-IT-Liefercockpit für agile Jira-Teams')).toBeVisible();
   await expect(projectSelect(page)).toHaveValue('');
   await expect(page.getByText('KI-Analyse')).toBeVisible();
   await expect(page.getByText('Ideen-Bewertung')).toBeVisible();
@@ -335,11 +335,12 @@ test('Szenario 12: Arbeitsmodi und Scrum Guide', async ({ page }) => {
   await expect(page.getByText('Daily business focus')).toBeVisible();
   await page.getByRole('button', { name: 'Generate AI hints' }).click();
   await expect(page.getByText('Potential plan changes')).toBeVisible();
-  await expect(page.getByText('AXON-2: Mobile crash is critical – assign immediately.')).toBeVisible();
+  await expect(page.getByText('AXON-2: Mobile crash blocks reliable usage on key devices.')).toBeVisible();
 
   await page.getByRole('button', { name: 'Scrum Guide' }).click();
   await expect(page.getByText('Scrum Guide essentials')).toBeVisible();
-  await expect(page.getByText('Commitment')).toBeVisible();
+  await expect(page.getByText('Commitment', { exact: true })).toBeVisible();
+  await expect(page.getByText('For a dev team, commitment means finishing the Sprint Goal together')).toBeVisible();
   await expect(page.getByText('What Sprint Planning means')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByText('Scrum Guide essentials')).toHaveCount(0);
@@ -361,8 +362,9 @@ test('Szenario 13: Refinement mit lokaler KI', async ({ page }) => {
   await expect(page.getByText('Refinement focus')).toBeVisible();
   await expect(page.getByText('Modernisierungs Board')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Use local AI' }).first().click();
-  await expect(page.getByText('AI refinement')).toBeVisible();
+  await page.locator('.workflow-ticket-actions').first().getByRole('button', { name: 'Details' }).click();
+  await page.getByRole('button', { name: 'Generate AI refinement' }).click();
+  await expect(page.getByText('AI refinement', { exact: true })).toBeVisible();
   const refinementEditor = page.locator('.refinement-editor');
   await expect(refinementEditor.locator('input').first()).toHaveValue('Implement secure OAuth2 login flow');
   await expect(refinementEditor.locator('.workflow-textarea--lg')).toHaveValue(/Provide OAuth2 login/);
@@ -642,9 +644,9 @@ test('Szenario 18: LLM-Smoketest prueft das ausgewaehlte Modell', async ({ page 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Szenario 19: Fokus-Analyse nutzt alle Tickets fuer Duplikate
+// Szenario 19: Fokus-Analyse nutzt alle Tickets für Duplikate
 // ─────────────────────────────────────────────────────────────────────────────
-test('Szenario 19: Fokus-Analyse nutzt alle Tickets fuer Duplikate', async ({ page }) => {
+test('Szenario 19: Fokus-Analyse nutzt alle Tickets für Duplikate', async ({ page }) => {
   const captures = {};
   await setupMocks(page, { captures });
   await page.goto('/');
@@ -657,7 +659,7 @@ test('Szenario 19: Fokus-Analyse nutzt alle Tickets fuer Duplikate', async ({ pa
   expect(captures.analyze.focus).toBe('redundancies');
   await expect(page.getByText('All tickets')).toBeVisible();
   await page.getByRole('button', { name: 'Redundancies' }).click();
-  await expect(page.getByText('Dark mode and search may share UI rework.')).toBeVisible();
+  await expect(page.getByText('Dark mode and search overlap in shared UI surfaces.')).toBeVisible();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -677,4 +679,22 @@ test('Szenario 20: Smoke-Test-Fehler markiert LLM als problematisch', async ({ p
 
   await expect(smokeButton).toHaveClass(/smoke-test-btn--error/);
   await expect(page.getByText('LLM issue')).toBeVisible();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Szenario 21: Agile-Hive-Fenster zeigt 3-Sprint-Trendanalyse
+// ─────────────────────────────────────────────────────────────────────────────
+test('Szenario 21: Agile Hive zeigt Durchschnitte und Trends für 3 Sprints', async ({ page }) => {
+  await setupMocks(page);
+  await page.goto('/');
+  await projectSelect(page).selectOption('AXON');
+  await page.waitForTimeout(400);
+
+  await page.getByRole('button', { name: 'Agile Hive' }).click();
+  await expect(page.getByText('Agile Hive metrics')).toBeVisible();
+  await expect(page.getByText('Last 3 sprints')).toBeVisible();
+  await expect(page.getByText('Avg velocity')).toBeVisible();
+  await expect(page.getByText('Delivery trend: up (+33.0)')).toBeVisible();
+  await expect(page.locator('.agile-hive-sprint-row')).toHaveCount(3);
+  await expect(page.locator('.agile-hive-sprint-row', { hasText: '2026-Q3' })).toHaveCount(1);
 });
