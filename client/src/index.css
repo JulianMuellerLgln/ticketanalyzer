@@ -44,6 +44,13 @@ html, body {
   overflow: auto;
 }
 
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1200;
+  background: var(--bg2);
+}
+
 /* ── Status bar ──────────────────────────────────────────────────────────── */
 .statusbar {
   display: flex;

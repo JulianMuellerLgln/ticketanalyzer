@@ -139,102 +139,104 @@ export default function App() {
 
   return (
     <div className="app">
-      <StatusBar
-        llm={llm}
-        selectedModel={selectedModel}
-        jiraOk={jiraOk}
-        projectCount={projects.length}
-        issueCount={issues.length}
-        lastRefresh={lastRefresh}
-        t={t}
-      />
+      <div className="app-topbar">
+        <StatusBar
+          llm={llm}
+          selectedModel={selectedModel}
+          jiraOk={jiraOk}
+          projectCount={projects.length}
+          issueCount={issues.length}
+          lastRefresh={lastRefresh}
+          t={t}
+        />
 
-      <div className="toolbar">
-        <div className="toolbar-left">
-          <select
-            className="input"
-            value={selectedProject}
-            onChange={(e) => selectProject(e.target.value)}
-            style={{ minWidth: 180 }}
-          >
-            <option value="">{t.selectProject}</option>
-            {projects.map((p, idx) => (
-              <option key={`${p.id || 'project'}-${p.key || idx}`} value={p.key || ''}>
-                {p.key || 'UNKNOWN'} — {p.name}
-              </option>
-            ))}
-          </select>
-
-          <button
-            className="btn-icon"
-            onClick={doRefresh}
-            disabled={refreshing || !selectedProject}
-            title={t.refresh}
-          >
-            <motion.span
-              animate={refreshing ? { rotate: 360 } : { rotate: 0 }}
-              transition={refreshing ? { duration: 1, repeat: Infinity, ease: 'linear' } : {}}
-              style={{ display: 'flex' }}
+        <div className="toolbar">
+          <div className="toolbar-left">
+            <select
+              className="input"
+              value={selectedProject}
+              onChange={(e) => selectProject(e.target.value)}
+              style={{ minWidth: 180 }}
             >
-              <RefreshCw size={14} />
-            </motion.span>
-          </button>
-        </div>
+              <option value="">{t.selectProject}</option>
+              {projects.map((p, idx) => (
+                <option key={`${p.id || 'project'}-${p.key || idx}`} value={p.key || ''}>
+                  {p.key || 'UNKNOWN'} — {p.name}
+                </option>
+              ))}
+            </select>
 
-        <div className="mode-switch" role="tablist" aria-label={t.workflowMode}>
-          {['refinement', 'planning', 'daily'].map((mode) => (
             <button
-              key={mode}
-              className={`mode-switch-btn${workflowMode === mode ? ' mode-switch-btn--active' : ''}`}
-              onClick={() => setWorkflowMode(mode)}
+              className="btn-icon"
+              onClick={doRefresh}
+              disabled={refreshing || !selectedProject}
+              title={t.refresh}
+            >
+              <motion.span
+                animate={refreshing ? { rotate: 360 } : { rotate: 0 }}
+                transition={refreshing ? { duration: 1, repeat: Infinity, ease: 'linear' } : {}}
+                style={{ display: 'flex' }}
+              >
+                <RefreshCw size={14} />
+              </motion.span>
+            </button>
+          </div>
+
+          <div className="mode-switch" role="tablist" aria-label={t.workflowMode}>
+            {['refinement', 'planning', 'daily'].map((mode) => (
+              <button
+                key={mode}
+                className={`mode-switch-btn${workflowMode === mode ? ' mode-switch-btn--active' : ''}`}
+                onClick={() => setWorkflowMode(mode)}
+                type="button"
+              >
+                {t.workflowModes[mode]}
+              </button>
+            ))}
+          </div>
+
+          <div className="toolbar-right">
+            <select
+              className="input"
+              value={selectedModel}
+              onChange={(event) => setSelectedModel(event.target.value)}
+              disabled={!llm.online || (llm.models || []).length === 0}
+              title={t.model}
+              style={{ minWidth: 200 }}
+            >
+              {(() => {
+                const options = llm.models || [];
+                if (options.length === 0) {
+                  const fallback = llm.recommendedModel || llm.defaultModel || '';
+                  return <option value={fallback}>{fallback || t.loading}</option>;
+                }
+                return options.map((modelName) => (
+                  <option key={modelName} value={modelName}>
+                    {modelName}{modelName === llm.recommendedModel ? ` · ${t.recommended}` : ''}
+                  </option>
+                ));
+              })()}
+            </select>
+
+            <button
+              className="btn-icon"
+              onClick={() => setShowScrumGuide(true)}
+              title={t.scrumGuideTitle}
               type="button"
             >
-              {t.workflowModes[mode]}
+              <BookOpenText size={14} />
+              {t.scrumGuideButton}
             </button>
-          ))}
-        </div>
 
-        <div className="toolbar-right">
-          <select
-            className="input"
-            value={selectedModel}
-            onChange={(event) => setSelectedModel(event.target.value)}
-            disabled={!llm.online || (llm.models || []).length === 0}
-            title={t.model}
-            style={{ minWidth: 200 }}
-          >
-            {(() => {
-              const options = llm.models || [];
-              if (options.length === 0) {
-                const fallback = llm.recommendedModel || llm.defaultModel || '';
-                return <option value={fallback}>{fallback || t.loading}</option>;
-              }
-              return options.map((modelName) => (
-                <option key={modelName} value={modelName}>
-                  {modelName}{modelName === llm.recommendedModel ? ` · ${t.recommended}` : ''}
-                </option>
-              ));
-            })()}
-          </select>
-
-          <button
-            className="btn-icon"
-            onClick={() => setShowScrumGuide(true)}
-            title={t.scrumGuideTitle}
-            type="button"
-          >
-            <BookOpenText size={14} />
-            {t.scrumGuideButton}
-          </button>
-
-          <button
-            className="btn-icon lang-btn"
-            onClick={() => setLang((l) => l === 'en' ? 'de' : 'en')}
-            title="Switch language"
-          >
-            <Globe size={13} style={{ marginRight: 4 }} />
-            {lang === 'en' ? 'DE' : 'EN'}
-          </button>
+            <button
+              className="btn-icon lang-btn"
+              onClick={() => setLang((l) => l === 'en' ? 'de' : 'en')}
+              title="Switch language"
+            >
+              <Globe size={13} style={{ marginRight: 4 }} />
+              {lang === 'en' ? 'DE' : 'EN'}
+            </button>
+          </div>
         </div>
       </div>
 
