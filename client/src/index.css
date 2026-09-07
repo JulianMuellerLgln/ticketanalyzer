@@ -197,6 +197,10 @@ html, body {
   grid-column: span 2;
 }
 
+.widget--right-rail {
+  grid-column: -2 / -1;
+}
+
 .widget:hover {
   border-color: #3a3a3a;
 }
